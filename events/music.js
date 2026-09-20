@@ -323,6 +323,7 @@ module.exports = (client) => {
         client.riffy.on('trackStart', async (player, track) => {
             try {
                 player.__recoveringTrackError = false;
+                player.__trackRecoveryAttempts = 0;
                 const channel = client.channels.cache.get(player.textChannel);
                 const guildId = player.guildId;
 
@@ -1755,6 +1756,7 @@ module.exports = (client) => {
             const guildId = player.guildId;
 
             console.warn(`[V2 TRACK STUCK] Guild ${guildId}: ${trackInfo.title || 'Unknown track'} stalled after ${payload?.thresholdMs || 'unknown'}ms`);
+            advancedMessageManager.cleanupGuildMessages(client, guildId, ['track']).catch(() => {});
 
             // Riffy calls stop() immediately after emitting this event.
             // Schedule recovery so the new play request is not overwritten
@@ -1800,6 +1802,11 @@ module.exports = (client) => {
                 source: trackInfo.sourceName
             });
 
+            // Lavalink can emit TrackStart before the source stream is
+            // rejected. Remove the stale "Active" panel immediately so it
+            // does not claim that silent audio is still playing.
+            await advancedMessageManager.cleanupGuildMessages(client, guildId, ['track']);
+
             // If another track is already queued, let the active player move
             // forward instead of creating another voice connection.
             if (player.queue.length > 0) {
@@ -1819,9 +1826,10 @@ module.exports = (client) => {
                     advancedMessageManager.addQuickDeleteMessage(client, skipMsg, 'error');
                 }
 
-                setTimeout(() => {
+                setTimeout(async () => {
                     try {
-                        player.play();
+                        player.__recoveringTrackError = false;
+                        await player.play();
                     } catch (playError) {
                         console.error(`[V2 TRACK ERROR] Queue recovery failed in guild ${guildId}:`, playError);
                     }
@@ -1836,13 +1844,18 @@ module.exports = (client) => {
                 !track ||
                 typeof track !== 'object' ||
                 trackErrorRetries.has(track) ||
-                player.__recoveringTrackError
+                player.__recoveringTrackError ||
+                (player.__trackRecoveryAttempts || 0) >= 3
             ) {
+                if ((player.__trackRecoveryAttempts || 0) >= 3) {
+                    player.destroy();
+                }
                 return;
             }
 
             trackErrorRetries.add(track);
             player.__recoveringTrackError = true;
+            player.__trackRecoveryAttempts = (player.__trackRecoveryAttempts || 0) + 1;
 
             if (channel) {
                 const retryContainer = advancedMessageManager.createV2Container('warning')
@@ -1866,36 +1879,52 @@ module.exports = (client) => {
                     const author = String(trackInfo.author || '').trim();
                     const searchTerms = [
                         [title, author].filter(Boolean).join(' '),
+                        `${title} official audio`,
                         title
                     ].filter(Boolean);
                     const failedIdentifier = trackInfo.identifier;
                     const failedUri = trackInfo.uri;
-                    let replacement = null;
+                    const candidates = [];
+                    const searchPlatform = client.riffy.options?.defaultSearchPlatform || 'ytsearch';
+                    const requester = track.requester || track.info?.requester;
 
                     for (const terms of searchTerms) {
                         const result = await client.riffy.resolve({
-                            query: `ytmsearch:${terms}`,
-                            requester: track.requester
+                            query: terms,
+                            source: searchPlatform,
+                            requester,
+                            node: player.node
                         });
 
-                        replacement = result?.tracks?.find(candidate => {
+                        const matches = result?.tracks?.filter(candidate => {
                             const info = candidate?.info || {};
                             return (
                                 info.identifier &&
                                 info.identifier !== failedIdentifier &&
-                                info.uri !== failedUri
+                                info.uri !== failedUri &&
+                                !candidates.some(existing => existing.info?.identifier === info.identifier)
                             );
-                        });
+                        }) || [];
 
-                        if (replacement) break;
+                        candidates.push(...matches);
+                        if (candidates.length >= 5) break;
                     }
 
-                    if (!replacement) {
+                    if (!candidates.length) {
                         throw new Error('No alternative playable YouTube result found');
                     }
 
-                    replacement.requester = track.requester;
-                    player.queue.unshift(replacement);
+                    // Queue several alternatives. If Lavalink rejects the
+                    // first replacement too, trackError will naturally move
+                    // to the next candidate instead of leaving a silent voice
+                    // connection.
+                    for (const candidate of candidates.slice(0, 5).reverse()) {
+                        candidate.requester = requester;
+                        if (candidate.info) candidate.info.requester = requester;
+                        player.queue.unshift(candidate);
+                    }
+
+                    player.__recoveringTrackError = false;
                     await player.play();
                 } catch (recoveryError) {
                     console.error(`[V2 TRACK ERROR] Alternative search failed in guild ${guildId}:`, recoveryError);
