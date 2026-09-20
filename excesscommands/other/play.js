@@ -205,23 +205,15 @@ module.exports = {
                 );
 
             const resolveTrack = (node, searchQuery = query) => withNodeResolutionLock(async () => {
-                const previousNode = client.riffy.nodeByRegion;
-                client.riffy.nodeByRegion = node;
-
-                try {
-                    return await withTimeout(
-                        client.riffy.resolve({
-                            query: searchQuery,
-                            requester: message.author
-                        }),
-                        20000,
-                        'Track search'
-                    );
-                } finally {
-                    if (client.riffy.nodeByRegion === node) {
-                        client.riffy.nodeByRegion = previousNode;
-                    }
-                }
+                return withTimeout(
+                    client.riffy.resolve({
+                        query: searchQuery,
+                        requester: message.author,
+                        node
+                    }),
+                    20000,
+                    'Track search'
+                );
             });
 
             let lastAttemptNode = null;
@@ -244,6 +236,7 @@ module.exports = {
                 const queries = spotifyRequest?.queries || [query];
                 const tracks = [];
                 let lastTrackError = null;
+                let startedPlayback = false;
 
                 for (const searchQuery of queries) {
                     try {
@@ -256,6 +249,16 @@ module.exports = {
                                 avatarURL: message.author.displayAvatarURL()
                             };
                             tracks.push(track);
+                            player.queue.add(track);
+
+                            // Do not wait for the rest of a large playlist before
+                            // starting audio. TrackStart (and the now-playing
+                            // panel) should happen as soon as the first result
+                            // is available; remaining results can fill the queue.
+                            if (!startedPlayback && !player.playing && !player.paused) {
+                                await withTimeout(player.play(), 20000, 'Lavalink playback');
+                                startedPlayback = true;
+                            }
                         }
                     } catch (error) {
                         lastTrackError = error;
@@ -265,11 +268,6 @@ module.exports = {
 
                 if (!tracks.length && lastTrackError) throw lastTrackError;
                 if (!tracks.length) return { player, track: null, tracks };
-
-                for (const track of tracks) player.queue.add(track);
-                if (!player.playing && !player.paused) {
-                    await withTimeout(player.play(), 20000, 'Lavalink playback');
-                }
 
                 return { player, track: tracks[0], tracks };
             };
