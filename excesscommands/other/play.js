@@ -177,20 +177,19 @@ module.exports = {
 
         const guildId = message.guild.id;
         return withGuildPlayLock(guildId, async () => {
-        let spotifyRequest = null;
-        try {
-            if (parseSpotifyUrl(query)) {
-                spotifyRequest = await getSpotifyTrackQueries(query);
-                if (!spotifyRequest?.queries?.length) {
-                    return temporaryReply(message, '❌ Playlist atau album Spotify itu tidak berisi lagu yang bisa diputar.');
-                }
+        const parsedSpotify = parseSpotifyUrl(query);
+        let spotifyRequest = parsedSpotify
+            ? { ...parsedSpotify, name: null, queries: [], partial: false }
+            : null;
+        if (parsedSpotify) {
+            try {
+                const metadataRequest = await getSpotifyTrackQueries(query);
+                if (metadataRequest) spotifyRequest = metadataRequest;
+            } catch (error) {
+                // A private link or a failed public metadata request can still
+                // be playable by a Lavalink node with Spotify support.
+                console.warn('Spotify metadata lookup failed; trying Lavalink directly:', error.message);
             }
-        } catch (error) {
-            console.error('Spotify collection load error:', error);
-            return temporaryReply(
-                message,
-                `❌ Link Spotify tidak bisa dibaca.\nPastikan link masih aktif dan konten Spotify bersifat publik.`
-            );
         }
 
             const createPlayer = (node) => withTimeout(
@@ -233,32 +232,63 @@ module.exports = {
                     player = await createPlayer(lastAttemptNode);
                 }
 
-                const queries = spotifyRequest?.queries || [query];
+                const queries = spotifyRequest?.queries?.length
+                    ? spotifyRequest.queries
+                    : [query];
                 const tracks = [];
                 let lastTrackError = null;
                 let startedPlayback = false;
+                const addTrackAndStart = async (track) => {
+                    track.requester = {
+                        id: message.author.id,
+                        username: message.author.username,
+                        avatarURL: message.author.displayAvatarURL()
+                    };
+                    if (track.info) track.info.requester = message.author;
+                    tracks.push(track);
+                    player.queue.add(track);
+
+                    // Do not wait for the rest of a large playlist before
+                    // starting audio. TrackStart (and the now-playing
+                    // panel) should happen as soon as the first result
+                    // is available; remaining results can fill the queue.
+                    if (!startedPlayback && !player.playing && !player.paused) {
+                        await withTimeout(player.play(), 20000, 'Lavalink playback');
+                        startedPlayback = true;
+                    }
+                };
+
+                // Prefer Lavalink's native Spotify loader. Nodes with the
+                // Spotify source plugin can return the complete collection
+                // (including 100+ tracks), unlike public page metadata which
+                // is commonly limited to eight preview items.
+                if (spotifyRequest?.type === 'playlist' || spotifyRequest?.type === 'album') {
+                    try {
+                        const collectionResult = await resolveTrack(lastAttemptNode, query);
+                        if (
+                            collectionResult?.loadType === 'playlist' &&
+                            collectionResult.tracks?.length
+                        ) {
+                            spotifyRequest = {
+                                ...spotifyRequest,
+                                name: collectionResult.playlistInfo?.name || spotifyRequest.name,
+                                partial: false
+                            };
+                            for (const track of collectionResult.tracks) {
+                                await addTrackAndStart(track);
+                            }
+                            return { player, track: tracks[0], tracks };
+                        }
+                    } catch (error) {
+                        console.warn('[RIFFY] Native Spotify collection load failed; using track fallback:', error.message);
+                    }
+                }
 
                 for (const searchQuery of queries) {
                     try {
                         const result = await resolveTrack(lastAttemptNode, searchQuery);
                         if (result?.tracks?.length) {
-                            const track = result.tracks[0];
-                            track.requester = {
-                                id: message.author.id,
-                                username: message.author.username,
-                                avatarURL: message.author.displayAvatarURL()
-                            };
-                            tracks.push(track);
-                            player.queue.add(track);
-
-                            // Do not wait for the rest of a large playlist before
-                            // starting audio. TrackStart (and the now-playing
-                            // panel) should happen as soon as the first result
-                            // is available; remaining results can fill the queue.
-                            if (!startedPlayback && !player.playing && !player.paused) {
-                                await withTimeout(player.play(), 20000, 'Lavalink playback');
-                                startedPlayback = true;
-                            }
+                            await addTrackAndStart(result.tracks[0]);
                         }
                     } catch (error) {
                         lastTrackError = error;
