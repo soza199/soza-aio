@@ -1,4 +1,5 @@
 const { getData } = require('spotify-url-info')(fetch);
+const { spotifyApiRequest } = require('./spotifyToken');
 
 function parseSpotifyUrl(value) {
     const input = String(value || '').trim();
@@ -27,12 +28,66 @@ function toSearchQuery(track) {
     return artists ? `${track.name} - ${artists}` : track.name;
 }
 
-function buildTrackResponse(parsed, name, tracks) {
+function buildTrackResponse(parsed, name, tracks, options = {}) {
     return {
         type: parsed.type,
         name: name || `Spotify ${parsed.type}`,
-        queries: tracks.map(toSearchQuery).filter(Boolean)
+        queries: tracks.map(toSearchQuery).filter(Boolean),
+        partial: Boolean(options.partial)
     };
+}
+
+function hasSpotifyApiCredentials() {
+    return Boolean(
+        process.env.SPOTIFY_CLIENT_ID?.trim() &&
+        process.env.SPOTIFY_CLIENT_SECRET?.trim()
+    );
+}
+
+function mapSpotifyApiTrack(track) {
+    if (!track?.name || track.is_local) return null;
+
+    return {
+        name: track.name,
+        artists: Array.isArray(track.artists) ? track.artists : []
+    };
+}
+
+async function getSpotifyApiCollection(parsed) {
+    if (parsed.type === 'track') {
+        const data = await spotifyApiRequest(`/tracks/${parsed.id}?market=US`);
+        return buildTrackResponse(parsed, data?.name, [mapSpotifyApiTrack(data)].filter(Boolean));
+    }
+
+    const collection = parsed.type === 'album'
+        ? await spotifyApiRequest(`/albums/${parsed.id}?market=US`)
+        : await spotifyApiRequest(
+            `/playlists/${parsed.id}?fields=name,tracks(total)&market=US`
+        );
+
+    const tracks = [];
+    let offset = 0;
+    const limit = 50;
+    const total = Number(collection?.tracks?.total) || 0;
+
+    while (offset < total || (total === 0 && offset === 0)) {
+        const endpoint = parsed.type === 'album'
+            ? `/albums/${parsed.id}/tracks?market=US&limit=${limit}&offset=${offset}`
+            : `/playlists/${parsed.id}/tracks?market=US&limit=${limit}&offset=${offset}`;
+        const page = await spotifyApiRequest(endpoint);
+        const items = Array.isArray(page?.items) ? page.items : [];
+        const pageTracks = items
+            .map(item => parsed.type === 'album' ? item : item?.track)
+            .map(mapSpotifyApiTrack)
+            .filter(Boolean);
+
+        tracks.push(...pageTracks);
+
+        if (!items.length || items.length < limit) break;
+        offset += items.length;
+    }
+
+    return buildTrackResponse(parsed, collection?.name, tracks);
 }
 
 async function getSpotifyTrackQueriesFromPublicMetadata(url, parsed) {
@@ -53,15 +108,28 @@ async function getSpotifyTrackQueriesFromPublicMetadata(url, parsed) {
                 }))
             : [];
 
-    return buildTrackResponse(parsed, data?.title, tracks);
+    return buildTrackResponse(parsed, data?.title, tracks, {
+        partial: parsed.type !== 'track'
+    });
 }
 
 async function getSpotifyTrackQueries(url) {
     const parsed = parseSpotifyUrl(url);
     if (!parsed) return null;
 
-    // Spotify's public page metadata contains the title and artist data needed
-    // to search Lavalink. This avoids requiring Spotify API credentials.
+    // Use the Web API when configured so albums/playlists are paginated instead
+    // of being limited to the small trackList exposed by Spotify's public page.
+    if (hasSpotifyApiCredentials()) {
+        try {
+            const response = await getSpotifyApiCollection(parsed);
+            if (response.queries.length || parsed.type === 'track') return response;
+        } catch (error) {
+            console.warn(`[Spotify] API collection lookup failed, using public metadata: ${error.message}`);
+        }
+    }
+
+    // Spotify's public page metadata is still useful when API credentials are
+    // not configured, but it can contain only a partial collection.
     return getSpotifyTrackQueriesFromPublicMetadata(url, parsed);
 }
 

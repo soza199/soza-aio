@@ -11,13 +11,28 @@ const legacyNode = {
 };
 
 function loadNodes() {
+    const configuredNodes = process.env.LAVALINK_NODES_JSON?.trim();
+    if (configuredNodes) {
+        try {
+            const parsed = JSON.parse(configuredNodes);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (error) {
+            console.warn(`[Lavalink] Could not parse LAVALINK_NODES_JSON: ${error.message}`);
+        }
+    }
+
     const nodesFile = process.env.LAVALINK_NODES_FILE?.trim()
         || path.join(__dirname, 'lavalink', 'nodes.json');
 
     try {
         const parsed = JSON.parse(fs.readFileSync(nodesFile, 'utf8'));
         if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
+            const uniqueNodes = new Map(
+                parsed
+                    .filter(node => node?.host && node?.port)
+                    .map(node => [`${node.host}:${node.port}`, node])
+            );
+            if (uniqueNodes.size > 0) return [...uniqueNodes.values()];
         }
     } catch (error) {
         console.warn(`[Lavalink] Could not load ${nodesFile}: ${error.message}`);
@@ -32,7 +47,7 @@ module.exports = {
     enabled: true,
     lavalink: {
         nodes,
-        defaultSearchPlatform: process.env.LAVALINK_SEARCH_PLATFORM || "ytmsearch",
+        defaultSearchPlatform: process.env.LAVALINK_SEARCH_PLATFORM || "ytsearch",
         restVersion: "v4"
     }
 };

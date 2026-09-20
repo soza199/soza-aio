@@ -316,9 +316,12 @@ module.exports = {
                 const position = result.player.queue.length;
                 const addedCount = result.tracks?.length || 1;
                 const collectionLabel = spotifyRequest?.type === 'album' ? 'album' : 'playlist';
+                const partialWarning = spotifyRequest?.partial
+                    ? '\n⚠️ Metadata publik Spotify hanya mengembalikan sebagian lagu. Tambahkan SPOTIFY_CLIENT_ID dan SPOTIFY_CLIENT_SECRET agar seluruh isi dimuat.'
+                    : '';
                 const reply = await message.reply(
                     spotifyRequest
-                        ? `🎵 Spotify ${collectionLabel} **${spotifyRequest.name}** ditambahkan ke queue.\n✅ **${addedCount}** lagu berhasil ditambahkan.\n📍 Queue sekarang: **${position}** lagu`
+                        ? `🎵 Spotify ${collectionLabel} **${spotifyRequest.name}** ditambahkan ke queue.\n✅ **${addedCount}** lagu berhasil ditambahkan.\n📍 Queue sekarang: **${position}** lagu${partialWarning}`
                         : `🎵 Added **${result.track.info.title}** to the queue.\n📍 Position: **#${position}**`
                 );
                 setTimeout(() => reply.delete().catch(() => {}), 6000);
