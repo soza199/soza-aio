@@ -176,6 +176,45 @@ module.exports = {
         }
 
         const guildId = message.guild.id;
+
+        // Prefix `.play` is the simple YouTube playback path. Prefer the
+        // local yt-dlp-backed DisTube player here instead of sending every
+        // YouTube request through public Lavalink extractors, which can return
+        // a valid search result but reject the stream a few seconds later.
+        // Keep Spotify on the Riffy path because this command already supports
+        // Spotify collection expansion there.
+        if (
+            client.distube &&
+            typeof client.playMusic === 'function' &&
+            !parseSpotifyUrl(query)
+        ) {
+            return withGuildPlayLock(guildId, async () => {
+                destroyGuildPlayer(client, guildId);
+
+                try {
+                    await client.playMusic(voiceChannel, query, {
+                        member: message.member,
+                        textChannel: message.channel,
+                        timeout: 60000
+                    });
+
+                    const reply = await message.reply(`🎵 Added **${query}** to the music queue.`);
+                    setTimeout(() => reply.delete().catch(() => {}), 6000);
+                } catch (error) {
+                    console.error('[DISTUBE] Prefix music play error:', error);
+                    const queue = client.distube.getQueue?.(guildId);
+                    if (queue) {
+                        await client.distube.stop(guildId).catch(() => {});
+                    }
+
+                    return temporaryReply(
+                        message,
+                        '❌ Saya tidak bisa memutar lagu itu melalui YouTube. Coba URL atau judul lagu lain.'
+                    );
+                }
+            });
+        }
+
         return withGuildPlayLock(guildId, async () => {
         const parsedSpotify = parseSpotifyUrl(query);
         let spotifyRequest = parsedSpotify
