@@ -245,6 +245,36 @@ module.exports = (client) => {
     const stuckTrackRetries = new WeakSet();
     const trackErrorRetries = new WeakSet();
 
+    const migratePlayerForRecovery = async (player, reason) => {
+        const currentNode = player?.node;
+        if (!client.riffy || !player || !currentNode) return false;
+
+        const availableNodes = [...(client.riffy.nodeMap?.values() || [])].filter((node) => (
+            node &&
+            node !== currentNode &&
+            node.connected
+        ));
+
+        if (availableNodes.length === 0) {
+            console.warn(`[V2 LAVALINK] No alternate connected node is available for guild ${player.guildId}`);
+            return false;
+        }
+
+        try {
+            await client.riffy.migrate(player);
+            console.warn(
+                `[V2 LAVALINK] Migrated guild ${player.guildId} from ${currentNode.name} to ${player.node.name} after ${reason}`
+            );
+            return player.node !== currentNode;
+        } catch (migrationError) {
+            console.error(
+                `[V2 LAVALINK] Could not migrate guild ${player.guildId} after ${reason}:`,
+                migrationError.message
+            );
+            return false;
+        }
+    };
+
     // Expose the shared message manager to prefix music commands so they
     // can clean up now-playing panels before destroying the Riffy player.
     client.musicMessageManager = advancedMessageManager;
@@ -278,6 +308,19 @@ module.exports = (client) => {
 
         client.riffy.on('nodeError', (node, error) => {
             console.error(`\x1b[31m[ V2 LAVALINK ]\x1b[0m Node \x1b[32m${node.name}\x1b[0m error: \x1b[33m${error.message}\x1b[0m`);
+        });
+
+        client.riffy.on('playerMigrated', (player, oldNode, newNode) => {
+            console.log(
+                `[V2 LAVALINK] Player ${player.guildId} migrated from ${oldNode.name} to ${newNode.name}`
+            );
+        });
+
+        client.riffy.on('playerMigrationFailed', (player, error) => {
+            console.error(
+                `[V2 LAVALINK] Player migration failed for guild ${player.guildId}:`,
+                error.message
+            );
         });
 
         client.on('voiceStateUpdate', async (oldState, newState) => {
@@ -1828,10 +1871,13 @@ module.exports = (client) => {
 
                 setTimeout(async () => {
                     try {
-                        player.__recoveringTrackError = false;
+                        player.__recoveringTrackError = true;
+                        await migratePlayerForRecovery(player, 'queued track error');
                         await player.play();
                     } catch (playError) {
                         console.error(`[V2 TRACK ERROR] Queue recovery failed in guild ${guildId}:`, playError);
+                    } finally {
+                        player.__recoveringTrackError = false;
                     }
                 }, 0);
                 return;
@@ -1875,6 +1921,8 @@ module.exports = (client) => {
 
             setTimeout(async () => {
                 try {
+                    await migratePlayerForRecovery(player, 'track error');
+
                     const title = String(trackInfo.title || '').trim();
                     const author = String(trackInfo.author || '').trim();
                     const searchTerms = [

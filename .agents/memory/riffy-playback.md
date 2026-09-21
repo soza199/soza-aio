@@ -14,3 +14,9 @@ Lavalink may emit `TrackStartEvent` before YouTube rejects the actual source str
 **Why:** Track selection and source-stream acquisition happen as separate Lavalink steps.
 
 **How to apply:** Remove stale now-playing UI on `trackError`/`trackStuck`, retry several distinct candidates, and destroy the player after bounded recovery attempts instead of leaving a silent session alive.
+
+When a track error may be caused by a degraded Lavalink node, `client.riffy.migrate(player)` moves the active player to another connected node while preserving its voice state and queue.
+
+**Why:** Riffy's public node list contains configuration objects, while connected runtime nodes live in `client.riffy.nodeMap`; recovery must select from the latter.
+
+**How to apply:** Before retrying a failed track, migrate only when another connected node exists, then resolve replacement tracks against `player.node`.
