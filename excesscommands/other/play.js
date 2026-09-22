@@ -171,11 +171,8 @@ module.exports = {
             return temporaryReply(message, '❌ I need **Connect** and **Speak** permission in that voice channel.');
         }
 
-        if (!client.riffy) {
-            return temporaryReply(message, '❌ The music system is not ready yet. Please try again shortly.');
-        }
-
         const guildId = message.guild.id;
+        const parsedSpotify = parseSpotifyUrl(query);
 
         // Prefix `.play` is the simple YouTube playback path. Prefer the
         // local yt-dlp-backed DisTube player here instead of sending every
@@ -184,14 +181,18 @@ module.exports = {
         // Keep Spotify on the Riffy path because this command already supports
         // Spotify collection expansion there.
         if (
-            client.distube &&
-            typeof client.playMusic === 'function' &&
-            !parseSpotifyUrl(query)
+            !parsedSpotify
         ) {
+            if (!client.distube || typeof client.playMusic !== 'function') {
+                console.warn('[DISTUBE] Prefix music requested before DisTube finished initializing');
+                return temporaryReply(message, '❌ Sistem musik sedang memulai. Coba lagi dalam beberapa detik.');
+            }
+
             return withGuildPlayLock(guildId, async () => {
                 destroyGuildPlayer(client, guildId);
 
                 try {
+                    console.log(`[DISTUBE] Prefix music route selected for guild ${guildId}: ${query}`);
                     await client.playMusic(voiceChannel, query, {
                         member: message.member,
                         textChannel: message.channel,
@@ -215,8 +216,11 @@ module.exports = {
             });
         }
 
+        if (!client.riffy) {
+            return temporaryReply(message, '❌ Sistem Spotify/Lavalink belum siap. Coba lagi dalam beberapa detik.');
+        }
+
         return withGuildPlayLock(guildId, async () => {
-        const parsedSpotify = parseSpotifyUrl(query);
         let spotifyRequest = parsedSpotify
             ? { ...parsedSpotify, name: null, queries: [], partial: false }
             : null;
