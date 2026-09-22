@@ -6,6 +6,13 @@ const { EmbedBuilder } = require('discord.js');
 const data = require('../UI/banners/musicard');
 
 module.exports = async (client) => {
+    // The prefix music command can recover this handler lazily if startup
+    // completed before DisTube was initialized. Avoid creating duplicate
+    // queues/listeners when the handler is already healthy.
+    if (client.distube && typeof client.playMusic === 'function') {
+        return client.distube;
+    }
+
   
     const distubeConfig = require('../utils/distubeConfig'); 
     

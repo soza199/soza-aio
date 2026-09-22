@@ -22,6 +22,7 @@ function withTimeout(promise, timeoutMs, label) {
 const guildPlayLocks = new Map();
 const nodeHealthCache = new WeakMap();
 let nodeResolutionQueue = Promise.resolve();
+let distubeInitializationPromise = null;
 
 function withGuildPlayLock(guildId, task) {
     const previous = guildPlayLocks.get(guildId) || Promise.resolve();
@@ -54,6 +55,29 @@ function withNodeResolutionLock(task) {
     const run = nodeResolutionQueue.then(task);
     nodeResolutionQueue = run.catch(() => {});
     return run;
+}
+
+async function ensureDistube(client) {
+    if (client.distube && typeof client.playMusic === 'function') {
+        return true;
+    }
+
+    if (!distubeInitializationPromise) {
+        distubeInitializationPromise = Promise.resolve()
+            .then(() => require('../../handlers/distube')(client))
+            .finally(() => {
+                distubeInitializationPromise = null;
+            });
+    }
+
+    try {
+        await distubeInitializationPromise;
+    } catch (error) {
+        console.error('[DISTUBE] Lazy initialization failed:', error);
+        return false;
+    }
+
+    return Boolean(client.distube && typeof client.playMusic === 'function');
 }
 
 function markNodeUnhealthy(node, error) {
@@ -183,8 +207,8 @@ module.exports = {
         if (
             !parsedSpotify
         ) {
-            if (!client.distube || typeof client.playMusic !== 'function') {
-                console.warn('[DISTUBE] Prefix music requested before DisTube finished initializing');
+            if (!await ensureDistube(client)) {
+                console.warn('[DISTUBE] Prefix music requested but DisTube is unavailable');
                 return temporaryReply(message, '❌ Sistem musik sedang memulai. Coba lagi dalam beberapa detik.');
             }
 
