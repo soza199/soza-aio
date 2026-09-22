@@ -1,5 +1,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getSpotifyTrackQueries, parseSpotifyUrl } = require('../../utils/spotifyTracks');
+const { maximizeVoiceChannelBitrate } = require('../../utils/voiceQuality');
 
 function temporaryReply(message, content, timeout = 6000) {
     return message.reply(content).then(reply => {
@@ -192,6 +193,7 @@ module.exports = {
                 destroyGuildPlayer(client, guildId);
 
                 try {
+                    await maximizeVoiceChannelBitrate(voiceChannel);
                     await client.playMusic(voiceChannel, query, {
                         member: message.member,
                         textChannel: message.channel,

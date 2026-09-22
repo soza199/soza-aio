@@ -17,26 +17,31 @@ module.exports = {
             return temporaryReply(message, '❌ Join the same voice channel as me to stop the music.');
         }
 
-        if (!client.riffy) {
+        const riffyPlayer = client.riffy?.players?.get(message.guild.id);
+        const distubeQueue = client.distube?.getQueue?.(message.guild.id);
+
+        if (!riffyPlayer && !distubeQueue) {
             return temporaryReply(message, '❌ The music system is not ready yet. Please try again shortly.');
         }
 
-        const player = client.riffy.players.get(message.guild.id);
-        if (!player) {
-            return temporaryReply(message, '❌ There is no active music player in this server.');
-        }
-
-        const queueLength = player.queue?.length || 0;
+        const queueLength = riffyPlayer?.queue?.length || distubeQueue?.songs?.length || 0;
 
         try {
-            if (client.musicMessageManager) {
+            if (riffyPlayer && client.musicMessageManager) {
                 await client.musicMessageManager.cleanupGuildMessages(
                     client,
                     message.guild.id
                 );
             }
 
-            player.destroy();
+            if (riffyPlayer) {
+                riffyPlayer.destroy();
+            }
+
+            if (distubeQueue) {
+                await client.distube.stop(message.guild.id);
+            }
+
             return temporaryReply(
                 message,
                 `⏹️ Music stopped and queue cleared (${queueLength} track${queueLength === 1 ? '' : 's'} removed).`
