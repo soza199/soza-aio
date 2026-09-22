@@ -73,7 +73,7 @@ async function ensureDistube(client) {
     try {
         await distubeInitializationPromise;
     } catch (error) {
-        console.error('[DISTUBE] Lazy initialization failed:', error);
+        console.error('[DISTUBE] Lazy initialization failed:', error.stack || error);
         return false;
     }
 
