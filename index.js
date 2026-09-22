@@ -74,8 +74,7 @@ const loadEventHandlers = async (client) => {
     require('./events/instagramHandler')(client);
     log('Instagram Notifier loaded');
     
-    await require('./handlers/distube')(client);
-    log('Distube Music System loaded');
+    await delay(3000); 
     
     try {
         require('./events/music')(client);
@@ -83,23 +82,11 @@ const loadEventHandlers = async (client) => {
     } catch (error) {
         console.error('[ERROR] Failed to load music system:', error);
     }
-
-    // Keep the YouTube player available even if a runtime error or a partial
-    // reload removes the DisTube references from the client object.
-    const repairDisTube = async () => {
-        if (client.distube && typeof client.playMusic === 'function') return;
-
-        try {
-            await require('./handlers/distube')(client);
-            if (client.distube && typeof client.playMusic === 'function') {
-                console.log('[DISTUBE] Music player restored automatically');
-            }
-        } catch (error) {
-            console.error('[DISTUBE] Automatic restoration failed:', error.message);
-        }
-    };
-
-    setInterval(repairDisTube, 60000);
-
+    
+    await delay(3000); 
+    
+    require('./handlers/distube')(client);
+    log('Distube Music System loaded');
+    
     console.log(`\n[STATUS] All systems initialized successfully at ${new Date().toLocaleTimeString()}\n`);
 };

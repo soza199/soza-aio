@@ -1,26 +1,11 @@
 const { DisTube } = require('distube');
 const { HighQualityYtDlpPlugin } = require('../utils/highQualityYtdlpPlugin');
+const { Dynamic } = require('musicard');
 const musicIcons = require('../UI/icons/musicicons');
 const { EmbedBuilder } = require('discord.js');
 const data = require('../UI/banners/musicard');
 
-let Dynamic;
-try {
-    ({ Dynamic } = require('musicard'));
-} catch (error) {
-    // Music cards are optional. Do not prevent the audio player from starting
-    // when the image-generation dependency is unavailable.
-    console.warn('[DISTUBE] Music card generator unavailable:', error.message);
-}
-
 module.exports = async (client) => {
-    // The prefix music command can recover this handler lazily if startup
-    // completed before DisTube was initialized. Avoid creating duplicate
-    // queues/listeners when the handler is already healthy.
-    if (client.distube && typeof client.playMusic === 'function') {
-        return client.distube;
-    }
-
   
     const distubeConfig = require('../utils/distubeConfig'); 
     
@@ -426,10 +411,6 @@ module.exports = async (client) => {
 
 async function generateMusicCard(song) {
     try {
-        if (typeof Dynamic !== 'function') {
-            throw new Error('Music card generator is unavailable');
-        }
-
         const randomIndex = Math.floor(Math.random() * data.backgroundImages.length);
         const backgroundImage = data.backgroundImages[randomIndex];
 

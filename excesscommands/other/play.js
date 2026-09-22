@@ -22,7 +22,6 @@ function withTimeout(promise, timeoutMs, label) {
 const guildPlayLocks = new Map();
 const nodeHealthCache = new WeakMap();
 let nodeResolutionQueue = Promise.resolve();
-let distubeInitializationPromise = null;
 
 function withGuildPlayLock(guildId, task) {
     const previous = guildPlayLocks.get(guildId) || Promise.resolve();
@@ -55,29 +54,6 @@ function withNodeResolutionLock(task) {
     const run = nodeResolutionQueue.then(task);
     nodeResolutionQueue = run.catch(() => {});
     return run;
-}
-
-async function ensureDistube(client) {
-    if (client.distube && typeof client.playMusic === 'function') {
-        return true;
-    }
-
-    if (!distubeInitializationPromise) {
-        distubeInitializationPromise = Promise.resolve()
-            .then(() => require('../../handlers/distube')(client))
-            .finally(() => {
-                distubeInitializationPromise = null;
-            });
-    }
-
-    try {
-        await distubeInitializationPromise;
-    } catch (error) {
-        console.error('[DISTUBE] Lazy initialization failed:', error.stack || error);
-        return false;
-    }
-
-    return Boolean(client.distube && typeof client.playMusic === 'function');
 }
 
 function markNodeUnhealthy(node, error) {
@@ -195,8 +171,11 @@ module.exports = {
             return temporaryReply(message, '❌ I need **Connect** and **Speak** permission in that voice channel.');
         }
 
+        if (!client.riffy) {
+            return temporaryReply(message, '❌ The music system is not ready yet. Please try again shortly.');
+        }
+
         const guildId = message.guild.id;
-        const parsedSpotify = parseSpotifyUrl(query);
 
         // Prefix `.play` is the simple YouTube playback path. Prefer the
         // local yt-dlp-backed DisTube player here instead of sending every
@@ -205,18 +184,14 @@ module.exports = {
         // Keep Spotify on the Riffy path because this command already supports
         // Spotify collection expansion there.
         if (
-            !parsedSpotify
+            client.distube &&
+            typeof client.playMusic === 'function' &&
+            !parseSpotifyUrl(query)
         ) {
-            if (!await ensureDistube(client)) {
-                console.warn('[DISTUBE] Prefix music requested but DisTube is unavailable');
-                return temporaryReply(message, '❌ Sistem musik sedang memulai. Coba lagi dalam beberapa detik.');
-            }
-
             return withGuildPlayLock(guildId, async () => {
                 destroyGuildPlayer(client, guildId);
 
                 try {
-                    console.log(`[DISTUBE] Prefix music route selected for guild ${guildId}: ${query}`);
                     await client.playMusic(voiceChannel, query, {
                         member: message.member,
                         textChannel: message.channel,
@@ -240,11 +215,8 @@ module.exports = {
             });
         }
 
-        if (!client.riffy) {
-            return temporaryReply(message, '❌ Sistem Spotify/Lavalink belum siap. Coba lagi dalam beberapa detik.');
-        }
-
         return withGuildPlayLock(guildId, async () => {
+        const parsedSpotify = parseSpotifyUrl(query);
         let spotifyRequest = parsedSpotify
             ? { ...parsedSpotify, name: null, queries: [], partial: false }
             : null;
