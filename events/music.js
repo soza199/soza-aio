@@ -297,13 +297,126 @@ module.exports = (client) => {
             },
             defaultSearchPlatform: lavalinkConfig.lavalink.defaultSearchPlatform || "ytmsearch",
             restVersion: lavalinkConfig.lavalink.restVersion || "v4",
-            autoMigratePlayers: true,
-            migrateOnDisconnect: true,
-            migrateOnFailure: true,
+            // Public nodes occasionally stop responding without closing the
+            // websocket. Keep retrying long enough for a temporary outage,
+            // and let Lavalink resume sessions when the node returns.
+            reconnectTimeout: 10000,
+            reconnectTries: 12,
+            autoResume: true,
+            resumeTimeout: 60,
         });
+
+        const nodeWatchdog = {
+            timer: null,
+            running: false,
+            lastFailures: new Map()
+        };
+
+        const nodeKey = (node) => node?.name || `${node?.host}:${node?.port}`;
+        const withNodeTimeout = (promise, timeoutMs) => {
+            let timer;
+            const timeout = new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new Error(`Node health check timed out after ${timeoutMs}ms`)), timeoutMs);
+            });
+
+            return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+        };
+
+        const restartStaleNode = (node) => {
+            if (!node || node.reconnectAttempt || !node.connected) return;
+
+            console.warn(`[V2 LAVALINK] Restarting unresponsive node ${node.name}`);
+            // Replace the stale websocket directly. Calling Riffy's
+            // reconnect() here would add another close listener, which can
+            // create duplicate reconnect timers when the old socket closes.
+            node.ws?.removeAllListeners();
+            node.ws?.close();
+            node.ws = null;
+            node.connected = false;
+            node.reconnectAttempted = 1;
+            node.connect();
+        };
+
+        const recoverLavalinkNodes = async () => {
+            if (nodeWatchdog.running || !client.riffy?.initiated) return;
+            nodeWatchdog.running = true;
+
+            try {
+                for (const configuredNode of nodes) {
+                    const key = nodeKey(configuredNode);
+                    let node = client.riffy.nodeMap?.get(key);
+
+                    // Riffy's Node removes itself from nodeMap after its
+                    // built-in reconnect attempts are exhausted. Recreate it
+                    // from the original configuration instead of requiring a
+                    // bot process restart.
+                    if (!node) {
+                        console.warn(`[V2 LAVALINK] Re-adding missing node ${key}`);
+                        node = client.riffy.createNode(configuredNode);
+                    }
+
+                    if (!node.connected) {
+                        // After Riffy's finite reconnect attempts are
+                        // exhausted, the node may stay in nodeMap with a
+                        // completed timer and no active websocket. Reset it
+                        // so the watchdog can bring it back.
+                        if (
+                            node.reconnectAttempted >= node.reconnectTries ||
+                            !node.ws
+                        ) {
+                            clearTimeout(node.reconnectAttempt);
+                            node.reconnectAttempt = null;
+                            node.reconnectAttempted = 1;
+                            console.warn(`[V2 LAVALINK] Reconnecting disconnected node ${key}`);
+                            node.connect();
+                        }
+                        continue;
+                    }
+
+                    try {
+                        await withNodeTimeout(node.rest.getStats(), 8000);
+                        nodeWatchdog.lastFailures.delete(key);
+                    } catch (error) {
+                        const failures = (nodeWatchdog.lastFailures.get(key) || 0) + 1;
+                        nodeWatchdog.lastFailures.set(key, failures);
+                        console.warn(
+                            `[V2 LAVALINK] Health check failed for ${key} (${failures}/2): ${error.message}`
+                        );
+
+                        // Require two consecutive failures so a brief REST
+                        // delay does not interrupt otherwise healthy music.
+                        if (failures >= 2) {
+                            nodeWatchdog.lastFailures.delete(key);
+                            restartStaleNode(node);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('[V2 LAVALINK] Node recovery watchdog failed:', error.message);
+            } finally {
+                nodeWatchdog.running = false;
+            }
+        };
+
+        // Run often enough to restore a node that Riffy removed after its
+        // finite reconnect attempts, but not so often that public nodes are
+        // needlessly polled.
+        nodeWatchdog.timer = setInterval(recoverLavalinkNodes, 60000);
+        nodeWatchdog.timer.unref?.();
         
         client.riffy.on('nodeConnect', (node) => {
             console.log(`\x1b[34m[ V2 LAVALINK ]\x1b[0m Node connected: \x1b[32m${node.name}\x1b[0m`);
+        });
+
+        client.riffy.on('nodeReconnect', (node) => {
+            console.warn(`[V2 LAVALINK] Reconnecting node: ${node.name}`);
+        });
+
+        client.riffy.on('nodeDisconnect', (node, reason) => {
+            console.warn(
+                `[V2 LAVALINK] Node disconnected: ${node.name}`,
+                reason?.reason || reason || ''
+            );
         });
 
         client.riffy.on('nodeError', (node, error) => {

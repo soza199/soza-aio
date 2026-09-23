@@ -30,7 +30,10 @@ function loadNodes() {
             const uniqueNodes = new Map(
                 parsed
                     .filter(node => node?.host && node?.port)
-                    .map(node => [`${node.host}:${node.port}`, node])
+                    .map(node => [
+                        `${String(node.host).trim().toLowerCase()}:${node.port}`,
+                        node
+                    ])
             );
             if (uniqueNodes.size > 0) return [...uniqueNodes.values()];
         }

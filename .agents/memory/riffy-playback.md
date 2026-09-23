@@ -26,3 +26,9 @@ Prefix `.play` playback should use the local DisTube/yt-dlp path for YouTube ins
 **Why:** Public Lavalink extractors can resolve a YouTube result successfully but fail when opening its audio stream.
 
 **How to apply:** Keep Riffy for the slash music/Spotify path unless the local extractor is unavailable, and ensure stopping music cleans up both player engines.
+
+Riffy's finite reconnect loop can leave a disconnected node in `nodeMap` after retries are exhausted, so recovery must reset/reconnect that node or recreate it from configuration.
+
+**Why:** A missing `nodeDisconnect` cleanup path can make all later node selection report no healthy nodes until the bot process restarts.
+
+**How to apply:** Keep a low-frequency watchdog for configured nodes; restore disconnected nodes without rebuilding the Discord client.
