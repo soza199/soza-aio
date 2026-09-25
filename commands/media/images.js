@@ -16,6 +16,8 @@
 */
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { images } = require('mediacord');
+const cmdIcons = require('../../UI/icons/commandicons');
+const { fetchMedia } = require('../../utils/fetchMedia');
 
 const imageTypes = {
     neko: images.sfw.neko,
@@ -108,7 +110,7 @@ module.exports = {
         const fetchImage = imageTypes[subcommand];
 
         try {
-            const imageUrl = await fetchImage();
+             const imageUrl = await fetchMedia(fetchImage, subcommand);
 
             const embed = new EmbedBuilder()
                 .setColor('#ff99cc')

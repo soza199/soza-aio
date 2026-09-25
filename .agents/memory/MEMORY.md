@@ -1,2 +1,3 @@
 - [Spotify playlist playback](spotify-playback.md) — use public Spotify page metadata for playback; Spotify API credentials are not required.
 - [Riffy playback start](riffy-playback.md) — start the first resolved track immediately; waiting for an entire playlist delays `trackStart` and now-playing UI.
+- [Media provider failover](media-provider-failover.md) — mediacord uses several upstream providers; GIF commands need a fallback when one provider is unavailable.

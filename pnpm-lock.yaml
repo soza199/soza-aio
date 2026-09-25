@@ -45,9 +45,6 @@ importers:
       '@napi-rs/canvas':
         specifier: ^0.1.69
         version: 0.1.100
-      akaneko:
-        specifier: ^5.3.0
-        version: 5.3.0
       axios:
         specifier: ^1.12.2
         version: 1.20.0
@@ -144,9 +141,6 @@ importers:
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
-      nsfwhub:
-        specifier: ^0.0.2
-        version: 0.0.2
       opusscript:
         specifier: ^0.0.8
         version: 0.0.8
@@ -163,9 +157,6 @@ importers:
       querystring:
         specifier: ^0.2.1
         version: 0.2.1
-      r34-module:
-        specifier: ^1.3.1
-        version: 1.4.0
       random-memes:
         specifier: ^3.2.6
         version: 3.2.6
@@ -2050,10 +2041,6 @@ packages:
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
 
-  akaneko@5.3.0:
-    resolution: {integrity: sha512-NzdnWa8xb4exHeafJ0Uo5s5n72bf8anZoz9XNkI/B86LaVaZtqFW5TMnpCNFogGCopZYddDNbbMpnkML88z5VQ==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-
   ansi-regex@3.0.1:
     resolution: {integrity: sha512-+O9Jct8wf++lXxxFc4hc8LsjaSq0HFzzL7cVsw8pRDIPdjKD2mT4ytDZlLuSBZ4cLKZFXIrMGO7DbQCtMJJMKw==}
     engines: {node: '>=4'}
@@ -3781,9 +3768,6 @@ packages:
     resolution: {integrity: sha512-AqZtDUWOMKs1G/8lwylVjrdYgqA4d9nu8hc+0gzRxlDb1I10+FHBGMXs6aiQHFdCUUlqH99MUMuLfzWDNDtfxw==}
     deprecated: This package is no longer supported.
 
-  nsfwhub@0.0.2:
-    resolution: {integrity: sha512-TcWjwioU7TlMQBXDBxN/BIi+odSZQvXgwv9BzcOGa72qm9Dzg+HcnT852Z5pUeqTE2lBOvJFXiTmeLpw0KBuNQ==}
-
   nth-check@2.1.1:
     resolution: {integrity: sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==}
 
@@ -4105,9 +4089,6 @@ packages:
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
-
-  r34-module@1.4.0:
-    resolution: {integrity: sha512-l+UTDzXHqiI0vOBIQcmgr+7NBscm0CDNzFkL5/3AtHmYoHtMMITkolDK2da3YHAyGzQEslicmMqk3DoE713cVg==}
 
   random-memes@3.2.6:
     resolution: {integrity: sha512-rsI0u2qYRCEEcWsvWFZci+I+zmAtBDwTcFNVqQuhTQdu1EXuIO1XMFmgvsu7Lh3TfQ6RdvsXTaLtqdyv03lJig==}
@@ -6680,8 +6661,6 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  akaneko@5.3.0: {}
-
   ansi-regex@3.0.1: {}
 
   ansi-regex@5.0.1: {}
@@ -8364,13 +8343,6 @@ snapshots:
       gauge: 3.0.2
       set-blocking: 2.0.0
 
-  nsfwhub@0.0.2:
-    dependencies:
-      axios: 1.20.0
-    transitivePeerDependencies:
-      - debug
-      - supports-color
-
   nth-check@2.1.1:
     dependencies:
       boolbase: 1.0.0
@@ -8699,14 +8671,6 @@ snapshots:
   queue-microtask@1.2.3: {}
 
   quick-format-unescaped@4.0.4: {}
-
-  r34-module@1.4.0:
-    dependencies:
-      axios: 1.20.0
-      cheerio: 1.2.0
-    transitivePeerDependencies:
-      - debug
-      - supports-color
 
   random-memes@3.2.6:
     dependencies:

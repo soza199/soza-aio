@@ -1,4 +1,3 @@
-const HentaiConfig = require('../models/hentai/hentaiSchema');
 const ServerConfig = require('../models/serverConfig/schema');
 const { EmbedBuilder } = require('discord.js');
 const fs = require('fs');
@@ -14,13 +13,6 @@ module.exports = {
         if (!message.guild) return;
         
     
-        let hentaiSettings;
-        try {
-            hentaiSettings = await HentaiConfig.findOne({ serverId: message.guild.id });
-        } catch (err) {
-            console.error('Error fetching hentai configuration from Mongoose:', err);
-        }
-
         let serverConfig;
         try {
             serverConfig = await ServerConfig.findOne({ serverId: message.guild.id });
@@ -47,15 +39,7 @@ module.exports = {
                 const commandPath = path.join(excessCommandsPath, folder, `${commandName}.js`);
                 
                 if (fs.existsSync(commandPath)) {
-                    if (folder === 'hentai') {
-                    
-                        if (!hentaiSettings?.status) {
-                            return message.reply('Hentai commands are currently disabled.');
-                        }
-                    }
-                
-                    if (config.excessCommands &&
-                        (folder === 'hentai' || config.excessCommands[folder])) {
+                    if (config.excessCommands && config.excessCommands[folder]) {
                         command = require(commandPath);
                 
                       

@@ -179,13 +179,6 @@ module.exports = {
                         .setDescription('User to check simp level')
                         .setRequired(false)))
         .addSubcommand(subcommand =>
-            subcommand.setName('pp')
-                .setDescription('🍆 Check pp size (for fun!)')
-                .addUserOption(option =>
-                    option.setName('user')
-                        .setDescription('User to check')
-                        .setRequired(false)))
-        .addSubcommand(subcommand =>
             subcommand.setName('stupid')
                 .setDescription('🤡 How stupid is someone?')
                 .addUserOption(option =>
@@ -262,7 +255,6 @@ module.exports = {
                 case 'age': return await this.handleAge(interaction, sendReply);
                 case 'kill': return await this.handleKill(interaction, sendReply);
                 case 'simp': return await this.handleSimp(interaction, sendReply);
-                case 'pp': return await this.handlePP(interaction, sendReply);
                 case 'stupid': return await this.handleStupid(interaction, sendReply);
                 case 'smart': return await this.handleSmart(interaction, sendReply);
                 case 'sus': return await this.handleSus(interaction, sendReply);
@@ -902,17 +894,6 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
             .setAccentColor(0xff1493)
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# 😍 Simp Level Detector\n## Romantic Devotion Analyzer\n\n**Subject:** ${user.displayName}\n**Simp Level:** ${simpLevel}%\n**Devotion Meter:** ${simpBar}\n\n**Analysis:** ${simpLevel >= 90 ? 'ULTIMATE SIMP! Maximum devotion detected! 💘' : simpLevel >= 70 ? 'Major simp energy! Very devoted! 😍' : simpLevel >= 50 ? 'Moderate simp tendencies! 💕' : simpLevel >= 30 ? 'Mild simp vibes! 💖' : 'Minimal simp energy! 😎'}\n\n**Simp Activities:** ${simpLevel >= 70 ? 'Writes poetry, buys flowers daily' : simpLevel >= 50 ? 'Always responds instantly to texts' : simpLevel >= 30 ? 'Gives genuine compliments' : 'Plays it cool'}\n\n*Being caring and devoted is actually wonderful! 💕*`));
         return sendReply(simpContainer);
-    },
-
-    async handlePP(interaction, sendReply) {
-        const user = interaction.options.getUser('user') || interaction.user;
-        const size = Math.floor(Math.random() * 25) + 1;
-        const measurement = '8' + '='.repeat(size) + 'D';
-
-        const ppContainer = new ContainerBuilder()
-            .setAccentColor(0xff6b6b)
-            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# 🍆 PP Size Calculator\n## Totally Scientific Measurement\n\n**Subject:** ${user.displayName}\n**Size:** ${size} inches\n**Visual:** ${measurement}\n\n**Classification:** ${size >= 20 ? '🦣 Legendary!' : size >= 15 ? '🐘 Impressive!' : size >= 10 ? '🐴 Above Average!' : size >= 7 ? '🐕 Average!' : '🐁 Compact!'}\n\n**Fun Fact:** Size doesn't matter - it's all about personality, humor, and kindness! The real big energy comes from having a good heart! 💖\n\n*This is completely random and just for laughs! 😂*`));
-        return sendReply(ppContainer);
     },
 
     async handleStupid(interaction, sendReply) {

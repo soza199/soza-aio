@@ -17,6 +17,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { gifs } = require('mediacord');
 const cmdIcons = require('../../UI/icons/commandicons');
+const { fetchGif } = require('../../utils/fetchMedia');
 
 const gestures = {
     bleh: { func: gifs.sfw.bleh, requiresTarget: false },
@@ -185,7 +186,7 @@ module.exports = {
             const sender = interaction.user;
 
             try {
-                const gif = await action.func();
+                 const gif = await fetchGif(action?.func, subcommand);
 
               
                 let verbForm;

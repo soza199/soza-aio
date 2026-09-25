@@ -198,18 +198,30 @@ module.exports = {
         if (!command) return;
         
      
-        const subcommandName = interaction.options.getSubcommand(false);
+        let subcommandName = null;
+        try {
+            subcommandName = interaction.options?.getSubcommand(false) || null;
+        } catch (error) {
+            console.warn(`Could not read subcommand for ${interaction.commandName}:`, error.message);
+        }
         // Keep the command-management entry point reachable so an owner or
         // configured bot manager can recover from a disabled-command lockout.
         // The command's own permission check still blocks unauthorized users.
         const isCommandRecovery = interaction.commandName === 'manage-commands';
-        const isDisabled = interaction.guild && !isCommandRecovery
-            ? await DisabledCommand.findOne({
-                guildId: interaction.guild.id,
-                commandName: interaction.commandName,
-                ...(subcommandName ? { subcommandName } : {})
-            })
-            : null;
+        let isDisabled = null;
+        if (interaction.guild && !isCommandRecovery) {
+            try {
+                isDisabled = await DisabledCommand.findOne({
+                    guildId: interaction.guild.id,
+                    commandName: interaction.commandName,
+                    ...(subcommandName ? { subcommandName } : {})
+                });
+            } catch (databaseError) {
+                // A database outage should not turn every unrelated slash
+                // command into Discord's generic interaction failure message.
+                console.error('Disabled-command lookup failed; continuing:', databaseError);
+            }
+        }
         
         if (isDisabled) {
             try {
@@ -250,11 +262,20 @@ module.exports = {
                 return;
             }
         
-            console.error(error);
+            console.error(`Error executing /${interaction.commandName}:`, error);
         
             try {
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({ content: lang.error, ephemeral: true });
+                const errorReply = {
+                    content: `${lang.error}\nPlease try again in a moment.`,
+                    ephemeral: true
+                };
+
+                if (interaction.deferred) {
+                    await interaction.editReply(errorReply);
+                } else if (interaction.replied) {
+                    await interaction.followUp(errorReply);
+                } else {
+                    await interaction.reply(errorReply);
                 }
             } catch (replyError) {
                 if (replyError.message.includes('Interaction has already been acknowledged') ||

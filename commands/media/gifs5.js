@@ -17,6 +17,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { gifs } = require('mediacord');
 const cmdIcons = require('../../UI/icons/commandicons');
+const { fetchGif } = require('../../utils/fetchMedia');
 
 const special = {
     cute: { func: gifs.sfw.cute, requiresTarget: false },
@@ -184,7 +185,7 @@ module.exports = {
             }
 
             try {
-                const gif = await action.func();
+                 const gif = await fetchGif(action?.func, subcommand);
 
                
                 let description;
