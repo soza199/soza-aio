@@ -42,14 +42,27 @@ async function fetchGif(fetcher, label) {
         // mediacord routes some SFW interactions through waifu.pics, which
         // can be unavailable independently from the other media providers.
         // OtakuGIFS exposes the same reaction names and is a reliable
-        // last-resort provider for these GIF commands.
+        // last-resort provider for these GIF commands. A few names are not
+        // part of OtakuGIFS, so use the closest supported reaction instead of
+        // returning Discord's generic interaction failure.
+        const fallbackReactions = {
+            bully: 'slap',
+            bonk: 'punch',
+            glomp: 'hug',
+            highfive: 'clap',
+            kick: 'punch',
+            cringe: 'pout',
+            yeet: 'roll',
+            kill: 'punch',
+        };
+        const fallbackReaction = fallbackReactions[label] || label;
         const response = await fetch(
-            `https://api.otakugifs.xyz/gif?reaction=${encodeURIComponent(label)}`,
+            `https://api.otakugifs.xyz/gif?reaction=${encodeURIComponent(fallbackReaction)}`,
             { signal: AbortSignal.timeout(8000) }
         );
 
         if (!response.ok) {
-            throw new Error(`${primaryError.message}; fallback provider returned HTTP ${response.status}`);
+            throw new Error(`${primaryError.message}; fallback provider returned HTTP ${response.status} for "${fallbackReaction}"`);
         }
 
         const payload = await response.json();
