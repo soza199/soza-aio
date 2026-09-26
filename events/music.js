@@ -485,6 +485,19 @@ module.exports = (client) => {
 
                 if (!channel) return;
 
+                const trackRequester = track.isAutoplay
+                    ? null
+                    : (track.requester || track.info?.requester);
+                const requesterName = track.isAutoplay
+                    ? 'soza'
+                    : (trackRequester?.username || 'soza');
+                const requesterAvatar = track.isAutoplay
+                    ? client.user.displayAvatarURL({ dynamic: true, size: 128 })
+                    : (trackRequester?.avatarURL || client.user.displayAvatarURL({ dynamic: true, size: 128 }));
+                const requesterLabel = track.isAutoplay
+                    ? 'soza'
+                    : (trackRequester?.id ? `<@${trackRequester.id}>` : 'soza');
+
                 await advancedMessageManager.cleanupGuildMessages(client, guildId);
                 sessionManager.updateActivity(guildId);
 
@@ -507,7 +520,7 @@ module.exports = (client) => {
                         thumbnailURL: track.info.thumbnail || track.info.artworkUrl || 'https://via.placeholder.com/300x300/DC92FF/FFFFFF?text=Music',
                         songTitle: track.info.title || 'Unknown Title',
                         songArtist: track.info.author || 'Unknown Artist',
-                        trackRequester: track.requester ? track.requester.username : "All In One",
+                        trackRequester: requesterName,
                         fontPath: path.join(__dirname, "../UI", "fonts", "AfacadFlux-Regular.ttf"),
                         backgroundColor: "#DC92FF",
                     });
@@ -538,8 +551,8 @@ module.exports = (client) => {
                             )
                             .setThumbnailAccessory(
                                 thumbnail => thumbnail
-                                    .setURL(track.requester?.avatarURL ?? client.user.displayAvatarURL({ dynamic: true, size: 128 }))
-                                    .setDescription(`Requested by ${track.requester ? track.requester.username : 'Unknown'}`)
+                                     .setURL(requesterAvatar)
+                                     .setDescription(`Requested by ${requesterName}`)
                             )
                     );
 
@@ -547,7 +560,7 @@ module.exports = (client) => {
                     .addSeparatorComponents(separator => separator)
                     .addTextDisplayComponents(
                         textDisplay => textDisplay.setContent([
-                            `**👤 Requested by:** ${track.requester ? `<@${track.requester.id}>` : 'All In One'}`,
+                            `**👤 Requested by:** ${requesterLabel}`,
                             `**🎧 Queue Position:** Playing Now`,
                             `**📊 Volume:** ${player.volume}%`,
                             `**🔁 Loop:** ${player.loop || 'None'}`,

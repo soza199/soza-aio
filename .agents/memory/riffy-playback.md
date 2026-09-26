@@ -32,3 +32,9 @@ Riffy's finite reconnect loop can leave a disconnected node in `nodeMap` after r
 **Why:** A missing `nodeDisconnect` cleanup path can make all later node selection report no healthy nodes until the bot process restarts.
 
 **How to apply:** Keep a low-frequency watchdog for configured nodes; restore disconnected nodes without rebuilding the Discord client.
+
+Autoplay tracks inherit the previous track's requester metadata from Riffy. For presentation, detect `track.isAutoplay` and label the requester as the bot while preserving the original requester metadata for control authorization.
+
+**Why:** Riffy's autoplay resolver passes `player.previous.info.requester`, which otherwise makes an automatically selected track appear to have been requested by the last human user.
+
+**How to apply:** Use the autoplay flag only for now-playing attribution; do not overwrite the underlying requester used by session and button-permission logic.
