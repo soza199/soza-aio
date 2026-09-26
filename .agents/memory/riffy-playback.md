@@ -32,3 +32,9 @@ Riffy's finite reconnect loop can leave a disconnected node in `nodeMap` after r
 **Why:** A missing `nodeDisconnect` cleanup path can make all later node selection report no healthy nodes until the bot process restarts.
 
 **How to apply:** Keep a low-frequency watchdog for configured nodes; restore disconnected nodes without rebuilding the Discord client.
+
+Riffy's autoplay implementation can resolve a track and call `play()` without awaiting the playback promise, so a successful return does not guarantee that the next track started.
+
+**Why:** A rejected or stalled `play()` promise can occur after the autoplay method has already returned, producing a false success message and no `trackStart` embed.
+
+**How to apply:** Capture and await the internal play promise, bound the wait with a timeout, retry a few times, and keep the queue-end recovery guarded against re-entry.

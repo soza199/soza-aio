@@ -725,19 +725,27 @@ module.exports = (client) => {
             try {
                 // A failed YouTube stream may temporarily leave the queue empty
                 // while trackError searches for a playable alternative.
-                if (player.__recoveringTrackError) return;
+                if (player.__recoveringTrackError || player.__autoplayInProgress) return;
 
                 const channel = client.channels.cache.get(player.textChannel);
                 const guildId = player.guildId;
 
                 if (!channel) return;
 
-                await handlePlayerCleanup(client, guildId, player, 'Queue ended');
-
                 const result = await autoplayCollection.findOne({ guildId }).catch(() => null);
                 const autoplay = result ? result.autoplay : false;
 
                 if (autoplay) {
+                    // Keep the player/session alive while Riffy resolves the next
+                    // track. Cleaning up here used to remove the current panel and
+                    // end the session before autoplay had actually started.
+                    await advancedMessageManager.cleanupGuildMessages(
+                        client,
+                        guildId,
+                        ['track', 'lyrics', 'queue', 'lastEmbed', 'control']
+                    );
+                    sessionManager.updateActivity(guildId);
+
                     const autoplayContainer = advancedMessageManager.createV2Container('autoplay')
                         .addTextDisplayComponents(
                             textDisplay => textDisplay.setContent('**🔄 AUTOPLAY ACTIVE**\nSearching for similar tracks...\n\n*Continuous music experience enabled.*')
@@ -750,8 +758,83 @@ module.exports = (client) => {
 
                     advancedMessageManager.addQuickDeleteMessage(client, autoplayMsg, 'autoplay');
 
+                    player.__autoplayInProgress = true;
                     try {
-                        await player.autoplay(player);
+                        let lastAutoplayError = null;
+                        let autoplayStarted = false;
+
+                        // Riffy 1.0.12 starts play() without awaiting it inside
+                        // autoplay(). Capture that promise so connection, queue,
+                        // and REST failures are handled here instead of becoming
+                        // an unhandled rejection after a false success message.
+                        const runAutoplayAttempt = async () => {
+                            const originalPlay = player.play;
+                            let playPromise = null;
+                            const waitWithTimeout = (promise, timeoutMs, message) => {
+                                let timeoutId;
+                                const timeoutPromise = new Promise((_, reject) => {
+                                    timeoutId = setTimeout(
+                                        () => reject(new Error(message)),
+                                        timeoutMs
+                                    );
+                                });
+
+                                return Promise.race([promise, timeoutPromise])
+                                    .finally(() => clearTimeout(timeoutId));
+                            };
+
+                            player.play = (...args) => {
+                                playPromise = Promise.resolve(originalPlay.apply(player, args));
+                                return playPromise;
+                            };
+
+                            try {
+                                const autoplayPromise = player.autoplay(player);
+                                await waitWithTimeout(
+                                    autoplayPromise,
+                                    20000,
+                                    'Autoplay resolve timed out'
+                                );
+
+                                if (!playPromise) {
+                                    throw new Error('Autoplay resolved without starting playback');
+                                }
+
+                                await waitWithTimeout(
+                                    playPromise,
+                                    20000,
+                                    'Autoplay playback timed out'
+                                );
+
+                                if (!player.playing || !player.current) {
+                                    throw new Error('Autoplay did not leave an active track');
+                                }
+                            } finally {
+                                player.play = originalPlay;
+                            }
+                        };
+
+                        for (let attempt = 1; attempt <= 3; attempt++) {
+                            try {
+                                await runAutoplayAttempt();
+                                autoplayStarted = true;
+                                break;
+                            } catch (attemptError) {
+                                lastAutoplayError = attemptError;
+                                console.warn(
+                                    `[V2 AUTOPLAY] Attempt ${attempt}/3 failed in guild ${guildId}:`,
+                                    attemptError.message
+                                );
+
+                                if (attempt < 3) {
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                }
+                            }
+                        }
+
+                        if (!autoplayStarted) {
+                            throw lastAutoplayError || new Error('Autoplay could not start a track');
+                        }
 
                         const successContainer = advancedMessageManager.createV2Container('success')
                             .addTextDisplayComponents(
@@ -767,7 +850,6 @@ module.exports = (client) => {
 
                     } catch (autoplayError) {
                         console.error('V2 Autoplay failed:', autoplayError);
-                        player.destroy();
 
                         const failContainer = advancedMessageManager.createV2Container('warning')
                             .addTextDisplayComponents(
@@ -780,9 +862,14 @@ module.exports = (client) => {
                         });
 
                         advancedMessageManager.addQuickDeleteMessage(client, failMsg, 'autoplay_fail');
+
+                        player.destroy();
+                    } finally {
+                        player.__autoplayInProgress = false;
                     }
 
                 } else {
+                    await handlePlayerCleanup(client, guildId, player, 'Queue ended');
                     player.destroy();
 
                     const queueEndContainer = advancedMessageManager.createV2Container('session_end')
