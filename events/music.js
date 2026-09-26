@@ -547,7 +547,7 @@ module.exports = (client) => {
                     .addSeparatorComponents(separator => separator)
                     .addTextDisplayComponents(
                         textDisplay => textDisplay.setContent([
-                            `**👤 Requested by:** ${track.requester ? `<@${track.requester.id}>` : 'All in One'}`,
+                            `**👤 Requested by:** ${track.requester ? `<@${track.requester.id}>` : 'All In One'}`,
                             `**🎧 Queue Position:** Playing Now`,
                             `**📊 Volume:** ${player.volume}%`,
                             `**🔁 Loop:** ${player.loop || 'None'}`,
