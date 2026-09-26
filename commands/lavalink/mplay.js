@@ -617,16 +617,6 @@ module.exports = {
                         return;
                     }
 
-                    const currentRequester = currentTrack.isAutoplay
-                        ? null
-                        : (currentTrack.requester || currentTrack.info?.requester);
-                    const currentRequesterName = currentTrack.isAutoplay
-                        ? 'soza'
-                        : (currentRequester?.username || 'soza');
-                    const currentRequesterAvatar = currentTrack.isAutoplay
-                        ? client.user.displayAvatarURL({ dynamic: true, size: 128 })
-                        : (currentRequester?.avatarURL || client.user.displayAvatarURL({ dynamic: true, size: 128 }));
-                    
                     const nowPlayingContainer = new ContainerBuilder()
                         .setAccentColor(0xdc92ff)
                         .addTextDisplayComponents(
@@ -636,11 +626,11 @@ module.exports = {
                         .addSectionComponents(
                             section => section
                                 .addTextDisplayComponents(
-                                    textDisplay => textDisplay.setContent(`**${currentTrack.info.title}**\n\n${currentTrack.info.uri ? `**🔗 [Listen on Platform](${currentTrack.info.uri})**` : ''}\n\n**Track Details:**\n• Duration: ${this.formatDuration(currentTrack.info.length)}\n• Position: ${this.formatDuration(player.position)} / ${this.formatDuration(currentTrack.info.length)}\n• Volume: ${player.volume}%\n• Loop: ${player.loop || 'None'}\n\n**Requested by:** ${currentRequesterName}`)
+                                    textDisplay => textDisplay.setContent(`**${currentTrack.info.title}**\n\n${currentTrack.info.uri ? `**🔗 [Listen on Platform](${currentTrack.info.uri})**` : ''}\n\n**Track Details:**\n• Duration: ${this.formatDuration(currentTrack.info.length)}\n• Position: ${this.formatDuration(player.position)} / ${this.formatDuration(currentTrack.info.length)}\n• Volume: ${player.volume}%\n• Loop: ${player.loop || 'None'}\n\n**Requested by:** ${currentTrack.requester?.username || 'Unknown'}`)
                                 )
                                 .setThumbnailAccessory(
                                     thumbnail => thumbnail
-                                        .setURL(currentTrack.info.artwork || currentRequesterAvatar || 'https://via.placeholder.com/300x300')
+                                        .setURL(currentTrack.info.artwork || currentTrack.requester?.avatarURL || 'https://via.placeholder.com/300x300')
                                         .setDescription('Now Playing')
                                 )
                         );
