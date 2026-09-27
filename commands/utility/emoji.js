@@ -79,6 +79,18 @@ module.exports = {
         });
 
         collector.on('collect', async buttonInteraction => {
+            const memberCanManageEmojis = Boolean(
+                buttonInteraction.member?.permissions?.has('ManageEmojisAndStickers')
+            );
+
+            if (!memberCanManageEmojis) {
+                await buttonInteraction.reply({
+                    content: '❌ You lack the **Manage Emojis and Stickers** permission(s) to continue.',
+                    ephemeral: true
+                }).catch(() => {});
+                return;
+            }
+
             if (stolenEmoji) {
                 await buttonInteraction.reply({
                     content: 'ℹ️ Emoji ini sudah ditambahkan ke server.',
