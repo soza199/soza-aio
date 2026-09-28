@@ -435,7 +435,9 @@ class BirthdayHandlers {
                     )
                     .addTextDisplayComponents(
                         new TextDisplayBuilder()
-                            .setContent(`*🎂 Celebrating in ${guild.name} • ${new Date().toLocaleString()}*`)
+                            .setContent(`*🎂 Celebrating in ${guild.name} • ${new Date().toLocaleString('en-US', {
+                                timeZone: birthday.timezone || 'UTC'
+                            })}*`)
                     );
     
                 // Create celebration buttons

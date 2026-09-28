@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const moment = require('moment-timezone');
 
 const birthdaySchema = new mongoose.Schema({
     userId: {
@@ -99,11 +100,15 @@ const birthdaySchema = new mongoose.Schema({
 // Virtual for age calculation
 birthdaySchema.virtual('age').get(function() {
     if (!this.birthday || !this.birthYearProvided) return null;
-    const today = new Date();
-    const birthDate = new Date(this.birthday);
-    let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
-    const monthDiff = today.getUTCMonth() - birthDate.getUTCMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < birthDate.getUTCDate())) {
+
+    // Birthday announcements can happen on the user's local date while UTC
+    // is still on the previous day. Calculate age in that same timezone.
+    const timezone = moment.tz.zone(this.timezone) ? this.timezone : 'UTC';
+    const today = moment.tz(new Date(), timezone);
+    const birthDate = moment.utc(this.birthday);
+    let age = today.year() - birthDate.year();
+    const monthDiff = today.month() - birthDate.month();
+    if (monthDiff < 0 || (monthDiff === 0 && today.date() < birthDate.date())) {
         age--;
     }
     return age;
