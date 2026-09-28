@@ -1,4 +1,4 @@
 - [Spotify playlist playback](spotify-playback.md) — use public Spotify page metadata for playback; Spotify API credentials are not required.
 - [Riffy playback start](riffy-playback.md) — start the first resolved track immediately; waiting for an entire playlist delays `trackStart` and now-playing UI.
 - [Media provider failover](media-provider-failover.md) — mediacord uses several upstream providers; GIF commands need a fallback when one provider is unavailable.
-- [Birthday age timezone](birthday-age-timezone.md) — calculate age in the birthday owner's timezone; local midnight can occur before the UTC calendar date changes.
+- [Birthday date timezone](birthday-age-timezone.md) — calculate age and days-until in the birthday owner's timezone, not UTC.

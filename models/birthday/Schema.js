@@ -117,26 +117,20 @@ birthdaySchema.virtual('age').get(function() {
 // Virtual for days until birthday
 birthdaySchema.virtual('daysUntilBirthday').get(function() {
     if (!this.birthday) return null;
-    const now = new Date();
-    const birthDate = new Date(this.birthday);
-    const currentYear = now.getUTCFullYear();
-    const today = Date.UTC(currentYear, now.getUTCMonth(), now.getUTCDate());
-    let nextBirthday = Date.UTC(
-        currentYear,
-        birthDate.getUTCMonth(),
-        birthDate.getUTCDate()
-    );
-    
-    if (nextBirthday < today) {
-        nextBirthday = Date.UTC(
-            currentYear + 1,
-            birthDate.getUTCMonth(),
-            birthDate.getUTCDate()
-        );
+    const timezone = moment.tz.zone(this.timezone) ? this.timezone : 'UTC';
+    const today = moment.tz(new Date(), timezone).startOf('day');
+    const birthDate = moment.utc(this.birthday);
+    let nextBirthday = moment.tz({
+        year: today.year(),
+        month: birthDate.month(),
+        date: birthDate.date()
+    }, timezone).startOf('day');
+
+    if (nextBirthday.isBefore(today)) {
+        nextBirthday = nextBirthday.add(1, 'year');
     }
-    
-    const timeDiff = nextBirthday - today;
-    return Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    return nextBirthday.diff(today, 'days');
 });
 
 // Index for efficient queries
