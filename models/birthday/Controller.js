@@ -12,7 +12,7 @@ class BirthdayController {
             // Parse birthday string (supports multiple formats)
             const birthday = this.parseBirthdayString(birthdayString);
             if (!birthday) {
-                throw new Error('Invalid birthday. Please use a valid day and month, such as day 27 and month 9.');
+                throw new Error('Invalid birthday. Please use a valid day, month, and four-digit birth year, such as 27-09-2000.');
             }
 
             const normalizedTimezone = this.normalizeTimezone(timezone);
@@ -23,7 +23,7 @@ class BirthdayController {
             const birthdayData = {
                 userId,
                 guildId,
-                // Store the calendar date at UTC noon so it cannot roll back
+                // Store the complete calendar date at UTC noon so it cannot roll back
                 // or forward a day when the process runs in another timezone.
                 birthday: new Date(Date.UTC(
                     birthday.year(),
@@ -33,6 +33,9 @@ class BirthdayController {
                     0,
                     0
                 )),
+                // New records always have an explicit birth year. This flag lets
+                // us distinguish them from legacy records that defaulted to 2000.
+                birthYearProvided: true,
                 timezone: normalizedTimezone,
                 ...options
             };
@@ -370,20 +373,12 @@ class BirthdayController {
             'MM/DD/YYYY',
             'DD-MM-YYYY',
             'DD/MM/YYYY',
-            'YYYY-MM-DD',
-            'MM-DD',
-            'MM/DD',
-            'DD-MM',
-            'DD/MM'
+            'YYYY-MM-DD'
         ];
 
         for (const format of formats) {
             const parsed = moment(birthdayString, format, true);
             if (parsed.isValid()) {
-                // If year is not provided, use a default year (but it doesn't matter for birthday)
-                if (format.length <= 5) {
-                    parsed.year(2000); // Default year for birthdays without year
-                }
                 return parsed;
             }
         }

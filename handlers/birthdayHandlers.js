@@ -403,7 +403,7 @@ class BirthdayHandlers {
                         new TextDisplayBuilder()
                             .setContent([
                                 `**🎂 ${user.displayName}**`,
-                                `**🎈 ${age ? `Turning ${age} today!` : 'Birthday today!'}**`,
+                                `**🎈 ${age !== null && age !== undefined ? `Turning ${age} today!` : 'Birthday today!'}**`,
                                 `**🎪 Server:** ${guild.name}`,
                                 birthday.settings?.allowMentions && guildSettings.settings?.mentionRole ? 
                                     `**🎊 <@&${guildSettings.settings.mentionRole}> celebrating <@${user.id}> 🎊**` : 
@@ -423,7 +423,7 @@ class BirthdayHandlers {
                                 .addItems(
                                     mediaItem => mediaItem
                                         .setURL('attachment://birthday-card.png')
-                                        .setDescription(`${user.displayName} Birthday Card - ${age ? `${age} years old` : 'Special Day'}`)
+                                        .setDescription(`${user.displayName} Birthday Card - ${age !== null && age !== undefined ? `${age} years old` : 'Special Day'}`)
                                 )
                         );
                 }

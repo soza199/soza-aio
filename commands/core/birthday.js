@@ -57,7 +57,7 @@ module.exports = {
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('date')
-                        .setDescription('Set the day, month, and timezone')
+                        .setDescription('Set your complete birth date and timezone')
                         .addIntegerOption(option =>
                             option.setName('day')
                                 .setDescription('Day of the month (1-31)')
@@ -69,6 +69,12 @@ module.exports = {
                                 .setDescription('Month (1-12)')
                                 .setMinValue(1)
                                 .setMaxValue(12)
+                                .setRequired(true))
+                        .addIntegerOption(option =>
+                            option.setName('year')
+                                .setDescription('Year of birth (for accurate age calculation)')
+                                .setMinValue(1900)
+                                .setMaxValue(new Date().getUTCFullYear())
                                 .setRequired(true))
                         .addStringOption(option =>
                             option.setName('zone')
@@ -206,8 +212,9 @@ module.exports = {
     async handleSetBirthday(interaction, userId, guildId) {
         const day = interaction.options.getInteger('day');
         const month = interaction.options.getInteger('month');
+        const year = interaction.options.getInteger('year');
         const timezone = interaction.options.getString('zone') || 'Asia/Jakarta';
-        const date = `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}`;
+        const date = `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}-${year}`;
 
         const options = {
             settings: {
@@ -229,9 +236,9 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor('#00FF7F')
             .setTitle('🎂 Birthday Set Successfully!')
-            .setDescription(`Your birthday has been set to **${moment.utc(result.birthday.birthday).format('MMMM Do')}**`)
+            .setDescription(`Your birthday has been set to **${moment.utc(result.birthday.birthday).format('MMMM Do, YYYY')}**`)
             .addFields(
-                { name: '🎂 Age', value: result.birthday.age ? `${result.birthday.age} years old` : 'Not calculated', inline: true },
+                { name: '🎂 Age', value: result.birthday.age !== null && result.birthday.age !== undefined ? `${result.birthday.age} years old` : 'Not calculated', inline: true },
                 { name: '⏰ Timezone', value: result.birthday.timezone, inline: true },
                 { name: '♈ Zodiac Sign', value: `${ZODIAC_EMOJIS[result.birthday.zodiacSign] || '❓'} ${result.birthday.zodiacSign?.charAt(0).toUpperCase() + result.birthday.zodiacSign?.slice(1) || 'Unknown'}`, inline: true },
                 { name: '📅 Days Until Birthday', value: `${result.birthday.daysUntilBirthday} days`, inline: true },
@@ -261,8 +268,8 @@ module.exports = {
             .setTitle(`🎂 ${targetUser.username}'s Birthday`)
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
             .addFields(
-                { name: '📅 Birthday', value: birthdayDate.format('MMMM Do'), inline: true },
-                { name: '🎂 Age', value: result.age ? `${result.age} years old` : 'Not calculated', inline: true },
+                { name: '📅 Birthday', value: birthdayDate.format('MMMM Do, YYYY'), inline: true },
+                { name: '🎂 Age', value: result.age !== null && result.age !== undefined ? `${result.age} years old` : 'Year not provided', inline: true },
                 { name: '⏰ Timezone', value: birthday.timezone, inline: true },
                 { name: '♈ Zodiac Sign', value: `${ZODIAC_EMOJIS[result.zodiacSign] || '❓'} ${result.zodiacSign?.charAt(0).toUpperCase() + result.zodiacSign?.slice(1) || 'Unknown'}`, inline: true },
                 { name: '📅 Days Until Birthday', value: `${result.daysUntil} days`, inline: true },
@@ -556,7 +563,7 @@ module.exports = {
                 
                 embed.addFields({
                     name: `🎂 ${user.username}`,
-                    value: `📅 ${birthdayDate.format('MMMM Do')} (${birthday.age ? birthday.age + ' years old' : 'Age unknown'})`,
+                    value: `📅 ${birthdayDate.format('MMMM Do, YYYY')} (${birthday.age !== null && birthday.age !== undefined ? birthday.age + ' years old' : 'Age unknown'})`,
                     inline: true
                 });
             } catch (error) {

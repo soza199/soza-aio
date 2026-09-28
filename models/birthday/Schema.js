@@ -16,6 +16,12 @@ const birthdaySchema = new mongoose.Schema({
         type: Date,
         required: true
     },
+    // Records created before the year field was required do not have a
+    // trustworthy age because their date used a placeholder year.
+    birthYearProvided: {
+        type: Boolean,
+        default: false
+    },
     timezone: {
         type: String,
         default: 'Asia/Jakarta',
@@ -92,7 +98,7 @@ const birthdaySchema = new mongoose.Schema({
 
 // Virtual for age calculation
 birthdaySchema.virtual('age').get(function() {
-    if (!this.birthday) return null;
+    if (!this.birthday || !this.birthYearProvided) return null;
     const today = new Date();
     const birthDate = new Date(this.birthday);
     let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
