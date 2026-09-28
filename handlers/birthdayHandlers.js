@@ -64,8 +64,9 @@ class BirthdayHandlers {
     }
 
     setupCronJobs() {
-        // Daily birthday check at 9 AM
-        cron.schedule('0 9 * * *', async () => {
+        // Check every minute so each birthday can be announced at 00:00
+        // in the timezone selected by that user.
+        cron.schedule('* * * * *', async () => {
             await this.dailyBirthdayCheck();
         });
 
@@ -301,11 +302,11 @@ class BirthdayHandlers {
     }
 
     async dailyBirthdayCheck() {
-        console.log('Running daily birthday check...');
+        console.log('Checking birthdays at local midnight...');
         
         for (const [guildId, guild] of this.client.guilds.cache) {
             try {
-                const result = await birthdayController.getTodaysBirthdays(guildId);
+                const result = await birthdayController.getBirthdaysAtMidnight(guildId);
                 
                 if (result.success && result.count > 0) {
                     await this.announceBirthdays(guild, result.birthdays);

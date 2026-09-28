@@ -18,7 +18,7 @@ const birthdaySchema = new mongoose.Schema({
     },
     timezone: {
         type: String,
-        default: 'UTC',
+        default: 'Asia/Jakarta',
         required: true
     },
     settings: {
@@ -95,9 +95,9 @@ birthdaySchema.virtual('age').get(function() {
     if (!this.birthday) return null;
     const today = new Date();
     const birthDate = new Date(this.birthday);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+    const monthDiff = today.getUTCMonth() - birthDate.getUTCMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < birthDate.getUTCDate())) {
         age--;
     }
     return age;
@@ -106,16 +106,25 @@ birthdaySchema.virtual('age').get(function() {
 // Virtual for days until birthday
 birthdaySchema.virtual('daysUntilBirthday').get(function() {
     if (!this.birthday) return null;
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    let nextBirthday = new Date(this.birthday);
-    nextBirthday.setFullYear(currentYear);
+    const now = new Date();
+    const birthDate = new Date(this.birthday);
+    const currentYear = now.getUTCFullYear();
+    const today = Date.UTC(currentYear, now.getUTCMonth(), now.getUTCDate());
+    let nextBirthday = Date.UTC(
+        currentYear,
+        birthDate.getUTCMonth(),
+        birthDate.getUTCDate()
+    );
     
     if (nextBirthday < today) {
-        nextBirthday.setFullYear(currentYear + 1);
+        nextBirthday = Date.UTC(
+            currentYear + 1,
+            birthDate.getUTCMonth(),
+            birthDate.getUTCDate()
+        );
     }
     
-    const timeDiff = nextBirthday.getTime() - today.getTime();
+    const timeDiff = nextBirthday - today;
     return Math.ceil(timeDiff / (1000 * 3600 * 24));
 });
 
@@ -189,8 +198,8 @@ birthdaySchema.statics.getTodaysBirthdays = function(guildId) {
 birthdaySchema.methods.calculateZodiacSign = function() {
     if (!this.birthday) return null;
     
-    const month = this.birthday.getMonth() + 1;
-    const day = this.birthday.getDate();
+    const month = this.birthday.getUTCMonth() + 1;
+    const day = this.birthday.getUTCDate();
     
     const zodiacSigns = [
         { sign: 'capricorn', start: { month: 12, day: 22 }, end: { month: 1, day: 19 } },

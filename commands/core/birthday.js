@@ -32,26 +32,49 @@ const CELEBRATION_STYLES = {
     none: '🔇 No celebration'
 };
 
+const BIRTHDAY_TIMEZONES = [
+    { name: '🇮🇩 Indonesia (WIB / Jakarta)', value: 'Asia/Jakarta' },
+    { name: '🇮🇩 Indonesia (WITA / Makassar)', value: 'Asia/Makassar' },
+    { name: '🇮🇩 Indonesia (WIT / Jayapura)', value: 'Asia/Jayapura' },
+    { name: 'UTC', value: 'UTC' },
+    { name: '🇸🇬 Singapore', value: 'Asia/Singapore' },
+    { name: '🇯🇵 Japan', value: 'Asia/Tokyo' },
+    { name: '🇬🇧 United Kingdom', value: 'Europe/London' },
+    { name: '🇩🇪 Central Europe', value: 'Europe/Berlin' },
+    { name: '🇺🇸 Eastern Time', value: 'America/New_York' },
+    { name: '🇺🇸 Pacific Time', value: 'America/Los_Angeles' },
+    { name: '🇦🇺 Australia (Sydney)', value: 'Australia/Sydney' }
+];
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('birthday')
         .setDescription('🎂 Advanced birthday management system')
-        .addSubcommand(subcommand =>
-            subcommand
+        .addSubcommandGroup(group =>
+            group
                 .setName('set')
-                .setDescription('Set your birthday with advanced options')
-                .addStringOption(option =>
-                    option.setName('date')
-                        .setDescription('Birthday (MM-DD-YYYY, MM-DD, DD/MM/YYYY, etc.)')
-                        .setRequired(true))
-                .addStringOption(option =>
-                    option.setName('timezone')
-                        .setDescription('Your timezone (e.g., America/New_York)')
-                        .setRequired(false))
-                .addBooleanOption(option =>
-                    option.setName('private')
-                        .setDescription('Keep your birthday private')
-                        .setRequired(false)))
+                .setDescription('Set your birthday')
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('date')
+                        .setDescription('Set the day, month, and timezone')
+                        .addIntegerOption(option =>
+                            option.setName('day')
+                                .setDescription('Day of the month (1-31)')
+                                .setMinValue(1)
+                                .setMaxValue(31)
+                                .setRequired(true))
+                        .addIntegerOption(option =>
+                            option.setName('month')
+                                .setDescription('Month (1-12)')
+                                .setMinValue(1)
+                                .setMaxValue(12)
+                                .setRequired(true))
+                        .addStringOption(option =>
+                            option.setName('zone')
+                                .setDescription('Timezone for the birthday announcement (default: Indonesia WIB)')
+                                .setRequired(false)
+                                .addChoices(...BIRTHDAY_TIMEZONES))))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('check')
@@ -132,15 +155,18 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply();
         
+        const subcommandGroup = interaction.options.getSubcommandGroup(false);
         const subcommand = interaction.options.getSubcommand();
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
         try {
+            if (subcommandGroup === 'set' && subcommand === 'date') {
+                await this.handleSetBirthday(interaction, userId, guildId);
+                return;
+            }
+
             switch (subcommand) {
-                case 'set':
-                    await this.handleSetBirthday(interaction, userId, guildId);
-                    break;
                 case 'check':
                     await this.handleCheckBirthday(interaction, userId, guildId);
                     break;
@@ -178,13 +204,14 @@ module.exports = {
     },
 
     async handleSetBirthday(interaction, userId, guildId) {
-        const date = interaction.options.getString('date');
-        const timezone = interaction.options.getString('timezone') || 'UTC';
-        const isPrivate = interaction.options.getBoolean('private') || false;
+        const day = interaction.options.getInteger('day');
+        const month = interaction.options.getInteger('month');
+        const timezone = interaction.options.getString('zone') || 'Asia/Jakarta';
+        const date = `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}`;
 
         const options = {
             settings: {
-                allowPublicView: !isPrivate,
+                allowPublicView: true,
                 allowMentions: true,
                 allowDMs: false,
                 celebrationStyle: 'simple'
@@ -202,13 +229,13 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor('#00FF7F')
             .setTitle('🎂 Birthday Set Successfully!')
-            .setDescription(`Your birthday has been set to **${moment(result.birthday.birthday).format('MMMM Do')}**`)
+            .setDescription(`Your birthday has been set to **${moment.utc(result.birthday.birthday).format('MMMM Do')}**`)
             .addFields(
                 { name: '🎂 Age', value: result.birthday.age ? `${result.birthday.age} years old` : 'Not calculated', inline: true },
                 { name: '⏰ Timezone', value: result.birthday.timezone, inline: true },
                 { name: '♈ Zodiac Sign', value: `${ZODIAC_EMOJIS[result.birthday.zodiacSign] || '❓'} ${result.birthday.zodiacSign?.charAt(0).toUpperCase() + result.birthday.zodiacSign?.slice(1) || 'Unknown'}`, inline: true },
                 { name: '📅 Days Until Birthday', value: `${result.birthday.daysUntilBirthday} days`, inline: true },
-                { name: '👁️ Privacy', value: isPrivate ? '🔒 Private' : '🌍 Public', inline: true }
+                { name: '🕛 Announcement', value: 'At 00:00 in this timezone', inline: true }
             )
             .setFooter({ text: `Use /birthday settings to customize your birthday preferences` })
             .setTimestamp();
@@ -415,7 +442,7 @@ module.exports = {
 
         if (!result.success) {
             return interaction.editReply({
-                embeds: [this.createErrorEmbed('You need to set your birthday first using `/birthday set`')]
+                embeds: [this.createErrorEmbed('You need to set your birthday first using `/birthday set date`')]
             });
         }
 
@@ -603,7 +630,7 @@ module.exports = {
             .setColor('#FF4444')
             .setTitle('🗑️ Birthday Removed')
             .setDescription('Your birthday has been successfully removed from the system.')
-            .setFooter({ text: 'You can set it again anytime using /birthday set' })
+            .setFooter({ text: 'You can set it again anytime using /birthday set date' })
             .setTimestamp();
 
         await interaction.editReply({ embeds: [embed] });

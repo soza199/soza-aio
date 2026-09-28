@@ -7,19 +7,33 @@ class BirthdayController {
     /**
      * Set or update a user's birthday
      */
-    async setBirthday(userId, guildId, birthdayString, timezone = 'UTC', options = {}) {
+    async setBirthday(userId, guildId, birthdayString, timezone = 'Asia/Jakarta', options = {}) {
         try {
             // Parse birthday string (supports multiple formats)
             const birthday = this.parseBirthdayString(birthdayString);
             if (!birthday) {
-                throw new Error('Invalid birthday format. Please use MM-DD-YYYY, MM-DD, or DD/MM/YYYY format.');
+                throw new Error('Invalid birthday. Please use a valid day and month, such as day 27 and month 9.');
+            }
+
+            const normalizedTimezone = this.normalizeTimezone(timezone);
+            if (!normalizedTimezone) {
+                throw new Error('Invalid timezone. Choose a supported timezone, such as Asia/Jakarta.');
             }
 
             const birthdayData = {
                 userId,
                 guildId,
-                birthday: birthday.toDate(),
-                timezone,
+                // Store the calendar date at UTC noon so it cannot roll back
+                // or forward a day when the process runs in another timezone.
+                birthday: new Date(Date.UTC(
+                    birthday.year(),
+                    birthday.month(),
+                    birthday.date(),
+                    12,
+                    0,
+                    0
+                )),
+                timezone: normalizedTimezone,
                 ...options
             };
 
@@ -44,6 +58,19 @@ class BirthdayController {
                 error: error.message
             };
         }
+    }
+
+    normalizeTimezone(timezone = 'Asia/Jakarta') {
+        const aliases = {
+            INDONESIA: 'Asia/Jakarta',
+            WIB: 'Asia/Jakarta',
+            WITA: 'Asia/Makassar',
+            WIT: 'Asia/Jayapura'
+        };
+        const requestedTimezone = String(timezone).trim();
+        const normalizedTimezone = aliases[requestedTimezone.toUpperCase()] || requestedTimezone;
+
+        return moment.tz.zone(normalizedTimezone) ? normalizedTimezone : null;
     }
 
     /**
@@ -126,12 +153,61 @@ class BirthdayController {
      */
     async getTodaysBirthdays(guildId) {
         try {
-            const todaysBirthdays = await Birthday.getTodaysBirthdays(guildId);
+            const birthdays = await Birthday.find({ guildId });
+            const now = new Date();
+            const todaysBirthdays = birthdays.filter(birthday => {
+                const timezone = this.normalizeTimezone(birthday.timezone) || 'UTC';
+                const localNow = moment.tz(now, timezone);
+                const birthdayDate = moment.utc(birthday.birthday);
+                return birthdayDate.month() === localNow.month()
+                    && birthdayDate.date() === localNow.date();
+            });
             
             return {
                 success: true,
                 birthdays: todaysBirthdays,
                 count: todaysBirthdays.length
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Find birthdays whose own timezone has just reached 00:00.
+     * The handler calls this once per minute so each user's local midnight
+     * is respected instead of relying on the server's timezone.
+     */
+    async getBirthdaysAtMidnight(guildId, now = new Date()) {
+        try {
+            const birthdays = await Birthday.find({ guildId });
+            const matches = birthdays.filter(birthday => {
+                const timezone = this.normalizeTimezone(birthday.timezone) || 'UTC';
+                const localNow = moment.tz(now, timezone);
+                const birthdayDate = moment.utc(birthday.birthday);
+
+                if (localNow.hour() !== 0 || localNow.minute() !== 0) return false;
+                if (birthdayDate.month() !== localNow.month() || birthdayDate.date() !== localNow.date()) {
+                    return false;
+                }
+
+                const lastCelebrated = birthday.stats?.lastCelebrated
+                    ? moment.tz(birthday.stats.lastCelebrated, timezone)
+                    : null;
+
+                return !lastCelebrated
+                    || lastCelebrated.year() !== localNow.year()
+                    || lastCelebrated.month() !== localNow.month()
+                    || lastCelebrated.date() !== localNow.date();
+            });
+
+            return {
+                success: true,
+                birthdays: matches,
+                count: matches.length
             };
         } catch (error) {
             return {
