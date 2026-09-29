@@ -5,13 +5,13 @@ const aiManager = require('./utils/AIManager');
 dotenv.config();
 
 const AiChat = require('./models/aichat/aiModel');
+const aiChatCache = require('./utils/aiChatCache');
 
 const BACKEND = process.env.BACKEND || 'https://server-backend-tdpa.onrender.com';
 const BOT_API = process.env.BOT_API;
 const DISCORD_USER_ID = process.env.DISCORD_USER_ID;
 const BOT_ID = client.user?.id || 'UNKNOWN_BOT';
 
-const activeChannelsCache = new Map();
 const MESSAGE_HISTORY_SIZE = 10;
 const conversationHistory = new Map();
 
@@ -32,16 +32,15 @@ function addToConversationHistory(channelId, role, text) {
 
 
 async function isAIChatChannel(channelId, guildId) {
-    const cacheKey = `${guildId}-${channelId}`;
-    if (activeChannelsCache.has(cacheKey)) {
-        return activeChannelsCache.get(cacheKey);
+    const cachedValue = aiChatCache.get(guildId, channelId);
+    if (cachedValue !== undefined) {
+        return cachedValue;
     }
 
     try {
         const config = await AiChat.findActiveChannel(guildId, channelId);
         const isActive = !!config;
-        activeChannelsCache.set(cacheKey, isActive);
-        setTimeout(() => activeChannelsCache.delete(cacheKey), 5 * 60 * 1000);
+        aiChatCache.set(guildId, channelId, isActive);
         return isActive;
     } catch (error) {
         console.error(`Error checking AI chat status for ${channelId}:`, error);

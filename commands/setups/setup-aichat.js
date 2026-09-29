@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const AiChat = require('../../models/aichat/aiModel');
+const aiChatCache = require('../../utils/aiChatCache');
 const cmdIcons = require('../../UI/icons/commandicons');
 const checkPermissions = require('../../utils/checkPermissions');
 
@@ -56,6 +57,7 @@ module.exports = {
                     
                  
                     await AiChat.setConfig(guildId, channel.id, isEnabled, interaction.user.id);
+                    aiChatCache.invalidateGuild(guildId);
                     
                     let updateMessage;
                     if (existingConfig) {
@@ -120,6 +122,7 @@ module.exports = {
                     }
                     
                     await AiChat.disableChat(guildId, interaction.user.id);
+                    aiChatCache.invalidateGuild(guildId);
                     
                     await interaction.reply({
                         content: `✅ AI Chat has been disabled for this server.`,
