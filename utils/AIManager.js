@@ -149,7 +149,7 @@ class AIManager {
 
                 const result = await Promise.race([
                     selectedKey.genAI.models.generateContent({
-                        model: options.model || "gemini-2.5-flash",
+                        model: options.model || "gemini-3.8-flash",
                         contents: prompt
                     }),
                     new Promise((_, reject) =>
@@ -214,7 +214,7 @@ async analyzeImage(imageUrl, focus = 'general') {
         const mimeType = imageResponse.headers['content-type'] || 'image/jpeg';
 
         const result = await selectedKey.genAI.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.8-flash",
             contents: [
                 {
                     role: "user", 

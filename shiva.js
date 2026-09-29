@@ -72,7 +72,7 @@ async function getGeminiResponse(prompt, channelId) {
         contents.push({ role: "user", parts: [{ text: prompt }] });
 
         const response = await aiManager.generateContent(contents, {
-            model: "gemini-2.5-flash",
+            model: "gemini-3.8-flash",
             timeout: 30000
         });
 

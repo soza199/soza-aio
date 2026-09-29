@@ -3,7 +3,7 @@ const FaqConfig = require('../models/faq/faqModel');
 const axios = require('axios');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
 
 // 🔒 RATE LIMITING SYSTEM WITH MAPS
 const userCooldowns = new Map(); // userId -> { lastUsed, blockedUntil, requestCount, violations }

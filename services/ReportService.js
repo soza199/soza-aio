@@ -180,7 +180,7 @@ class ReportService {
             const analysisPrompt = this.buildAnalysisPrompt(report, context);
             
             const analysis = await aiManager.generateContent(analysisPrompt, {
-                model: "gemini-2.0-flash",
+                model: "gemini-3.8-flash",
                 timeout: 20000
             });
             
