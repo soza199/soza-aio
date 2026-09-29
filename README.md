@@ -45,7 +45,7 @@
 <h4>Step 1: Configure environment variables</h4>
 
 <ol>
-   <li>Set the variables in your hosting provider. Do not commit tokens or database credentials to <code>config.json</code>. Public Spotify links played with <code>.play</code> or <code>/music play</code> do not require Spotify credentials, but Spotify API credentials are needed to load every track from large albums or playlists.</li>
+   <li>Set the variables in your hosting provider. Do not commit tokens, API keys, or database credentials to <code>config.json</code>. Public Spotify links played with <code>.play</code> or <code>/music play</code> do not require Spotify credentials, but Spotify API credentials are needed to load every track from large albums or playlists.</li>
 </ol>
 
 <h4>ENV SETUP</h4>
@@ -61,6 +61,7 @@ TWITCH_CLIENT_ID=
 TWITCH_ACCESS_TOKEN=
 INSTAGRAM_ACCESS_TOKEN=
 MONGODB_URI=
+GEMINI_API_KEY=
 DISCORD_USER_ID=
 BOT_API=
 DISCORD_GUILD_ID=
@@ -73,9 +74,12 @@ MUSIC_DEFAULT_VOLUME=90
 <ol>
   <li>Create a new service in <a href="https://railway.com/">Railway</a> from this repository.</li>
   <li>Railway will use <code>railway.json</code> and install the project with pnpm.</li>
-  <li>Add at least <code>TOKEN</code> and <code>MONGODB_URI</code> in the service Variables.</li>
+  <li>Add at least <code>TOKEN</code>, <code>MONGODB_URI</code>, and the global <code>GEMINI_API_KEY</code> in the service Variables.</li>
   <li>Set <code>DISCORD_GUILD_ID</code> to your server ID so slash commands appear immediately while deploying. Without it, Discord registers them globally and propagation can take up to an hour.</li>
 </ol>
+
+<h4>AI chat setup</h4>
+<p>The bot uses one global <code>GEMINI_API_KEY</code> from the hosting provider's secret manager. Server administrators do not need to add keys through Discord. After the bot starts, run <code>/setup-aichat set</code> and choose the channel where AI chat should respond.</p>
 
 <h4>Step 3: Add Build and Start Commands</h4>
 <pre>
