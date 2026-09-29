@@ -58,7 +58,7 @@ class AIManager {
 
     async getHealthyKey() {
      
-        if (Date.now() - this.lastCacheUpdate > this.cacheTimeout) {
+        if (this.keyCache.size === 0 || Date.now() - this.lastCacheUpdate > this.cacheTimeout) {
             await this.updateKeyCache();
         }
 
@@ -137,7 +137,7 @@ class AIManager {
 
    
     async generateContent(prompt, options = {}) {
-        const maxRetries = Math.min(this.keyCache.size, 3);
+        const maxRetries = Math.min(Math.max(this.keyCache.size, 1), 3);
         let lastError;
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -165,8 +165,19 @@ class AIManager {
                 console.log(`\x1b[36m[ AI MANAGER ]\x1b[0m Used ${selectedKey.name} (${responseTime}ms)`);
 
             
+                const responseText = typeof result.text === 'string'
+                    ? result.text
+                    : result.candidates?.[0]?.content?.parts
+                        ?.map(part => part.text)
+                        .filter(Boolean)
+                        .join('\n');
+
+                if (!responseText) {
+                    throw new Error('Gemini returned an empty response');
+                }
+
                 return {
-                    text: () => result.candidates[0].content.parts[0].text
+                    text: () => responseText
                 };
 
             } catch (error) {
