@@ -77,8 +77,8 @@ Gunakan jawaban yang natural dan tidak terlalu panjang untuk Discord.`
         console.error('Error getting Gemini response:', error.message);
         if (error.message.includes('blocked') || error.message.includes('safety')) {
             return "Sorry, I can't respond to that due to content guidelines.";
-        } else if (error.message.includes('rate limit') || error.message.includes('quota')) {
-            return "High demand right now — please try again later.";
+        } else if (/429|resource_exhausted|rate[\s_-]*limit|quota/i.test(error.message)) {
+            return "Batas penggunaan Gemini sedang tercapai. Coba lagi beberapa saat lagi, atau minta admin menambahkan API key lain.";
         } else if (error.message.includes('No active Gemini API keys')) {
             return "AI services are temporarily unavailable. Please contact the admin.";
         }

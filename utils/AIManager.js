@@ -5,6 +5,7 @@ class AIManager {
     constructor() {
         this.currentKeyIndex = 0;
         this.rateLimits = new Map();
+        this.providerCooldowns = new Map();
         this.keyCache = new Map();
         this.lastCacheUpdate = 0;
         this.cacheTimeout = 60000; 
@@ -67,11 +68,17 @@ class AIManager {
         }
 
 
-        const availableKeys = Array.from(this.keyCache.values()).filter(key =>
+        const healthyKeys = Array.from(this.keyCache.values()).filter(key =>
             !this.isRateLimited(key.keyId)
+        );
+        const availableKeys = healthyKeys.filter(key =>
+            !this.isProviderCoolingDown(key.keyId)
         );
 
         if (availableKeys.length === 0) {
+            if (healthyKeys.length > 0 && healthyKeys.every(key => this.isProviderCoolingDown(key.keyId))) {
+                throw new Error('All Gemini API keys are temporarily rate limited');
+            }
             throw new Error('All API keys are rate limited');
         }
 
@@ -99,6 +106,22 @@ class AIManager {
         }
 
         this.rateLimits.get(keyId).requests.push(Date.now());
+    }
+
+    isProviderCoolingDown(keyId) {
+        const cooldownUntil = this.providerCooldowns.get(keyId);
+        if (!cooldownUntil) return false;
+
+        if (Date.now() >= cooldownUntil) {
+            this.providerCooldowns.delete(keyId);
+            return false;
+        }
+
+        return true;
+    }
+
+    markProviderRateLimited(keyId, cooldownMs = 60000) {
+        this.providerCooldowns.set(keyId, Date.now() + cooldownMs);
     }
 
     async updateKeyStats(keyId, success, responseTime, error = null) {
@@ -141,8 +164,9 @@ class AIManager {
         let lastError;
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
+            let selectedKey = null;
             try {
-                const selectedKey = await this.getHealthyKey();
+                selectedKey = await this.getHealthyKey();
                 this.trackRateLimit(selectedKey.keyId);
 
                 const startTime = Date.now();
@@ -183,16 +207,24 @@ class AIManager {
 
             } catch (error) {
                 lastError = error;
-                const keyId = this.keyCache.size > 0
-                    ? Array.from(this.keyCache.keys())[this.currentKeyIndex % this.keyCache.size]
-                    : 'unknown';
+                const errorText = `${error?.status || ''} ${error?.code || ''} ${error?.message || error}`.toLowerCase();
+                const isProviderRateLimit = /429|resource_exhausted|rate[\s_-]*limit|quota/.test(errorText);
+                const keyId = selectedKey?.keyId || 'unknown';
 
                 console.error(`\x1b[31m[ AI MANAGER ]\x1b[0m Error with key:`, error.message);
 
-                await this.updateKeyStats(keyId, false, 0, error.message);
+                if (selectedKey) {
+                    await this.updateKeyStats(keyId, false, 0, error.message);
+                }
 
                 if (error.message.includes('safety') || error.message.includes('blocked')) {
                     throw new AIContentBlockedError('Content blocked by AI safety filters');
+                }
+
+                if (isProviderRateLimit && selectedKey) {
+                    this.markProviderRateLimited(selectedKey.keyId);
+                    lastError = new Error('Gemini API rate limit reached; try again later');
+                    continue;
                 }
 
                 if (attempt < maxRetries - 1) {
