@@ -7,6 +7,11 @@ class AIManager {
         this.rateLimits = new Map();
         this.providerCooldowns = new Map();
         this.keyCache = new Map();
+        this.globalKeyId = 'ENV_GEMINI';
+        this.globalStats = {
+            totalRequests: 0,
+            successfulRequests: 0
+        };
         this.lastCacheUpdate = 0;
         this.cacheTimeout = 60000; 
 
@@ -18,6 +23,22 @@ class AIManager {
 
     async updateKeyCache() {
         try {
+            const globalApiKey = process.env.GEMINI_API_KEY?.trim();
+
+            if (globalApiKey) {
+                this.keyCache.clear();
+                this.keyCache.set(this.globalKeyId, {
+                    keyId: this.globalKeyId,
+                    apiKey: globalApiKey,
+                    name: 'Global Gemini API',
+                    avgResponseTime: 0,
+                    genAI: new GoogleGenAI({ apiKey: globalApiKey }),
+                    isGlobal: true
+                });
+                this.lastCacheUpdate = Date.now();
+                return;
+            }
+
             const keys = await GeminiApiKey.find({
                 isActive: true,
                 $or: [
@@ -126,6 +147,12 @@ class AIManager {
 
     async updateKeyStats(keyId, success, responseTime, error = null) {
         try {
+            if (keyId === this.globalKeyId) {
+                this.globalStats.totalRequests++;
+                if (success) this.globalStats.successfulRequests++;
+                return;
+            }
+
             const key = await GeminiApiKey.findOne({ keyId });
             if (!key) return;
 
@@ -628,6 +655,20 @@ Respond ONLY in valid JSON format:
 
 
     async getStats() {
+        if (process.env.GEMINI_API_KEY?.trim()) {
+            const { totalRequests, successfulRequests } = this.globalStats;
+            return {
+                totalKeys: 1,
+                activeKeys: 1,
+                cachedKeys: this.keyCache.size,
+                totalRequests,
+                successRate: totalRequests > 0
+                    ? ((successfulRequests / totalRequests) * 100).toFixed(1) + '%'
+                    : '0%',
+                lastCacheUpdate: new Date(this.lastCacheUpdate).toLocaleTimeString()
+            };
+        }
+
         const keys = await GeminiApiKey.find();
         const totalRequests = keys.reduce((sum, key) => sum + key.totalRequests, 0);
         const totalSuccessful = keys.reduce((sum, key) => sum + key.successfulRequests, 0);

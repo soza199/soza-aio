@@ -167,6 +167,20 @@ module.exports = {
     },
 
     async handleList(interaction) {
+        if (process.env.GEMINI_API_KEY?.trim()) {
+            const embed = new EmbedBuilder()
+                .setTitle('🤖 Gemini API')
+                .setColor('#00ff00')
+                .setDescription('Global Gemini API key is configured securely.')
+                .addFields(
+                    { name: 'Status', value: '🟢 Active', inline: true },
+                    { name: 'Setup', value: 'Use `/setup-aichat set` to enable a channel.', inline: false }
+                )
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+
         const keys = await GeminiApiKey.find().sort({ addedAt: -1 });
         
         if (keys.length === 0) {
