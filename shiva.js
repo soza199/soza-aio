@@ -52,28 +52,23 @@ async function isAIChatChannel(channelId, guildId) {
 async function getGeminiResponse(prompt, channelId) {
     try {
         const history = getConversationContext(channelId);
-        const contents = [];
-        contents.push({
-            role: "user",
-            parts: [{ text: "You are a helpful Discord bot assistant. Keep your responses concise and friendly. Don't use markdown formatting." }]
-        });
-        contents.push({
-            role: "model",
-            parts: [{ text: "Understood. I'll keep responses concise and friendly." }]
-        });
-
-        for (const msg of history) {
-            contents.push({
+        const contents = history.map(msg => ({
                 role: msg.role === "bot" ? "model" : "user",
                 parts: [{ text: msg.text }]
-            });
-        }
+        }));
 
         contents.push({ role: "user", parts: [{ text: prompt }] });
 
         const response = await aiManager.generateContent(contents, {
             model: "gemini-3.8-flash",
-            timeout: 30000
+            timeout: 30000,
+            config: {
+                systemInstruction: `Kamu adalah asisten Discord yang ramah, hangat, dan bisa diajak ngobrol tentang berbagai hal.
+Jawab dalam bahasa yang dipakai pengguna. Kamu boleh membantu pertanyaan teknis, mengobrol santai, menanggapi sapaan, memberi dukungan saat pengguna curhat, membantu ide, resep, dan kebutuhan umum lainnya.
+Untuk curhat, dengarkan dengan empati, jangan menghakimi, validasi perasaan pengguna, lalu berikan saran praktis yang lembut. Jika ada risiko bahaya atau menyakiti diri, sarankan pengguna segera menghubungi orang tepercaya atau layanan darurat setempat.
+Jangan mengaku sebagai manusia atau profesional berlisensi. Jangan mengarang fakta. Jika konteks belum cukup, tanyakan pertanyaan lanjutan.
+Gunakan jawaban yang natural dan tidak terlalu panjang untuk Discord.`
+            }
         });
 
         return response.text();

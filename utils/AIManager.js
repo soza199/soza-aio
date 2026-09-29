@@ -137,7 +137,7 @@ class AIManager {
 
    
     async generateContent(prompt, options = {}) {
-        const maxRetries = Math.min(Math.max(this.keyCache.size, 1), 3);
+        const maxRetries = 3;
         let lastError;
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -150,7 +150,8 @@ class AIManager {
                 const result = await Promise.race([
                     selectedKey.genAI.models.generateContent({
                         model: options.model || "gemini-3.8-flash",
-                        contents: prompt
+                        contents: prompt,
+                        ...(options.config ? { config: options.config } : {})
                     }),
                     new Promise((_, reject) =>
                         setTimeout(() => reject(new Error('Timeout')), options.timeout || 30000)
@@ -182,19 +183,20 @@ class AIManager {
 
             } catch (error) {
                 lastError = error;
-                const keyId = this.keyCache.size > 0 ? Array.from(this.keyCache.keys())[0] : 'unknown';
+                const keyId = this.keyCache.size > 0
+                    ? Array.from(this.keyCache.keys())[this.currentKeyIndex % this.keyCache.size]
+                    : 'unknown';
 
                 console.error(`\x1b[31m[ AI MANAGER ]\x1b[0m Error with key:`, error.message);
 
-           
                 await this.updateKeyStats(keyId, false, 0, error.message);
 
-         
-                if (error.message.includes('quota') || error.message.includes('limit')) {
-                
-                    continue;
-                } else if (error.message.includes('safety') || error.message.includes('blocked')) {
+                if (error.message.includes('safety') || error.message.includes('blocked')) {
                     throw new AIContentBlockedError('Content blocked by AI safety filters');
+                }
+
+                if (attempt < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
                 }
 
                 continue;
