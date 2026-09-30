@@ -12,8 +12,10 @@ module.exports = {
     aliases: ['bet'],
     description: 'Gamble your money for a chance to win more! (Affected by gambling luck) with v2 components',
     async execute(message, args) {
+        let wagerTaken = 0;
+        let wagerResolved = false;
         try {
-            const profile = await EconomyManager.getProfile(message.author.id, message.guild.id);
+            let profile = await EconomyManager.getProfile(message.author.id, message.guild.id);
             
            
             const cooldownCheck = EconomyManager.checkCooldown(profile, 'gambling');
@@ -52,10 +54,10 @@ module.exports = {
             if (args[0] === 'all' || args[0] === 'max') {
                 amount = profile.wallet;
             } else {
-                amount = parseInt(args[0], 10);
+                amount = Number(args[0]);
             }
 
-            if (isNaN(amount) || amount <= 0) {
+            if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000) {
                 const components = [];
 
                 const invalidAmountContainer = new ContainerBuilder()
@@ -82,7 +84,7 @@ module.exports = {
 
                 insufficientContainer.addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(`# 💸 Insufficient Funds\n## NOT ENOUGH MONEY TO BET\n\n> You only have **\`$${profile.wallet.toLocaleString()}\`** in your wallet!\n> You're trying to bet **\`$${amount.toLocaleString()}\`**`)
+                        .setContent(`# 💸 Insufficient Funds\n## NOT ENOUGH COINS TO BET\n\n> You only have **\`${profile.wallet.toLocaleString()} coins\`** in your wallet!\n> You're trying to bet **\`${amount.toLocaleString()} coins\`**`)
                 );
 
                 components.push(insufficientContainer);
@@ -94,7 +96,7 @@ module.exports = {
 
                 suggestionContainer.addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(`## 💡 **BETTING SUGGESTIONS**\n\n**Available to Bet:** \`$${profile.wallet.toLocaleString()}\`\n**Try:** \`!gamble ${Math.floor(profile.wallet / 2)}\` (Half your wallet)\n**Safe Bet:** \`!gamble ${Math.floor(profile.wallet * 0.1)}\` (10% of wallet)\n**All-In:** \`!gamble all\` (Everything you have)\n\n> Remember: Only gamble what you can afford to lose!`)
+                        .setContent(`## 💡 **BETTING SUGGESTIONS**\n\n**Available to Bet:** \`${profile.wallet.toLocaleString()} coins\`\n**Try:** \`!gamble ${Math.floor(profile.wallet / 2)}\` (Half your wallet)\n**Safe Bet:** \`!gamble ${Math.floor(profile.wallet * 0.1)}\` (10% of wallet)\n**All-In:** \`!gamble all\` (Everything you have)\n\n> Remember: Only gamble what you can afford to lose!`)
                 );
 
                 components.push(suggestionContainer);
@@ -106,6 +108,22 @@ module.exports = {
             }
 
           
+            profile = await EconomyManager.applyWalletTransaction(
+                message.author.id,
+                message.guild.id,
+                -amount,
+                {
+                    description: 'Gambling stake',
+                    category: 'gambling',
+                    cooldownName: 'gambling',
+                    cooldownMs: 30 * 1000
+                }
+            );
+            if (!profile) {
+                return message.reply('Your balance or gambling cooldown changed. Please check your balance and try again later.');
+            }
+            wagerTaken = amount;
+
             const luckMultiplier = EconomyManager.getGamblingLuck(profile);
             
        
@@ -113,8 +131,6 @@ module.exports = {
             const winChance = Math.min(75, 45 + baseLuckBonus); 
             
             const won = Math.random() * 100 < winChance;
-            
-            profile.cooldowns.gambling = new Date();
             
             const components = [];
 
@@ -135,28 +151,31 @@ module.exports = {
                 
                 const winnings = Math.floor(amount * multiplier);
                 const profit = winnings - amount;
-                
-                profile.wallet += profit;
+                const creditedProfile = await EconomyManager.applyWalletTransaction(
+                    message.author.id,
+                    message.guild.id,
+                    winnings,
+                    {
+                        description: `Gambling payout (${multiplier.toFixed(2)}x)`,
+                        category: 'gambling'
+                    }
+                );
+                if (!creditedProfile) throw new Error('Could not credit gambling payout');
+                profile = creditedProfile;
+                wagerResolved = true;
                 
                 let winType = '';
                 if (multiplier >= 4) winType = '🎉 **MEGA JACKPOT!** 🎉';
                 else if (multiplier >= 3) winType = '⭐ **JACKPOT!** ⭐';
                 else if (multiplier >= 2.5) winType = '🎰 **BIG WIN!** 🎰';
                 
-                profile.transactions.push({
-                    type: 'income',
-                    amount: profit,
-                    description: `Gambling win (${multiplier.toFixed(2)}x)`,
-                    category: 'gambling'
-                });
-
                 
                 const successContainer = new ContainerBuilder()
                     .setAccentColor(0xFFD700);
 
                 successContainer.addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(`# 🎰 Gambling Victory!\n## ${winType || 'LUCKY WIN!'}\n\n> Congratulations! Lady Luck smiled upon you today!\n> You bet **\`$${amount.toLocaleString()}\`** and won **\`$${winnings.toLocaleString()}\`**!`)
+                        .setContent(`# 🎰 Gambling Victory!\n## ${winType || 'LUCKY WIN!'}\n\n> Congratulations! Lady Luck smiled upon you today!\n> You bet **\`${amount.toLocaleString()} coins\`** and won **\`${winnings.toLocaleString()} coins\`**!`)
                 );
 
                 components.push(successContainer);
@@ -174,12 +193,12 @@ module.exports = {
 
                 winDetailsContainer.addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(`**💎 Pure Profit:** \`$${profit.toLocaleString()}\`\n**📈 Win Multiplier:** \`${multiplier.toFixed(2)}x\`\n**🍀 Luck Bonus:** \`${luckMultiplier.toFixed(2)}x\`\n**🎯 Win Chance:** \`${winChance.toFixed(1)}%\``)
+                        .setContent(`**💎 Pure Profit:** \`${profit.toLocaleString()} coins\`\n**📈 Win Multiplier:** \`${multiplier.toFixed(2)}x\`\n**🍀 Luck Bonus:** \`${luckMultiplier.toFixed(2)}x\`\n**🎯 Win Chance:** \`${winChance.toFixed(1)}%\``)
                 );
 
                 winDetailsContainer.addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(`**💳 New Wallet Balance:** \`$${profile.wallet.toLocaleString()}\`\n**🎲 Roll Result:** \`${roll.toFixed(1)}/100\`\n**📝 Transaction Logged:** Win recorded in history`)
+                        .setContent(`**💳 New Wallet Balance:** \`${profile.wallet.toLocaleString()} coins\`\n**🎲 Roll Result:** \`${roll.toFixed(1)}/100\`\n**📝 Transaction Logged:** Win recorded in history`)
                 );
 
                 components.push(winDetailsContainer);
@@ -200,15 +219,7 @@ module.exports = {
                 }
 
             } else {
-               
-                profile.wallet -= amount;
-                
-                profile.transactions.push({
-                    type: 'expense',
-                    amount: amount,
-                    description: 'Gambling loss',
-                    category: 'gambling'
-                });
+                wagerResolved = true;
 
                
                 const lossContainer = new ContainerBuilder()
@@ -216,7 +227,7 @@ module.exports = {
 
                 lossContainer.addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(`# 🎲 Gambling Loss\n## LADY LUCK WASN'T ON YOUR SIDE\n\n> Unfortunately, you didn't win this time.\n> You bet **\`$${amount.toLocaleString()}\`** and lost it all, but don't give up!`)
+                        .setContent(`# 🎲 Gambling Loss\n## LADY LUCK WASN'T ON YOUR SIDE\n\n> Unfortunately, you didn't win this time.\n> You bet **\`${amount.toLocaleString()} coins\`** and lost it all, but don't give up!`)
                 );
 
                 components.push(lossContainer);
@@ -234,7 +245,7 @@ module.exports = {
 
                 lossDetailsContainer.addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(`**🎯 Your Win Chance:** \`${winChance.toFixed(1)}%\`\n**🍀 Luck Multiplier:** \`${luckMultiplier.toFixed(2)}x\`\n**💸 Amount Lost:** \`$${amount.toLocaleString()}\`\n**💳 Remaining Balance:** \`$${profile.wallet.toLocaleString()}\``)
+                        .setContent(`**🎯 Your Win Chance:** \`${winChance.toFixed(1)}%\`\n**🍀 Luck Multiplier:** \`${luckMultiplier.toFixed(2)}x\`\n**💸 Amount Lost:** \`${amount.toLocaleString()} coins\`\n**💳 Remaining Balance:** \`${profile.wallet.toLocaleString()} coins\``)
                 );
 
                 components.push(lossDetailsContainer);
@@ -261,12 +272,10 @@ module.exports = {
 
             nextGambleContainer.addTextDisplayComponents(
                 new TextDisplayBuilder()
-                    .setContent(`## 🎰 **NEXT GAMBLING SESSION**\n\n**Cooldown:** \`30 seconds\`\n**Next Available:** \`${new Date(Date.now() + 30000).toLocaleTimeString()}\`\n**Current Balance:** \`$${profile.wallet.toLocaleString()}\`\n\n> ${won ? 'Ride your winning streak or cash out while ahead!' : 'Take a moment to plan your comeback strategy!'}`)
+                    .setContent(`## 🎰 **NEXT GAMBLING SESSION**\n\n**Cooldown:** \`30 seconds\`\n**Next Available:** \`${new Date(Date.now() + 30000).toLocaleTimeString()}\`\n**Current Balance:** \`${profile.wallet.toLocaleString()} coins\`\n\n> ${won ? 'Ride your winning streak or cash out while ahead!' : 'Take a moment to plan your comeback strategy!'}`)
             );
 
             components.push(nextGambleContainer);
-
-            await profile.save();
 
             await message.reply({
                 components: components,
@@ -276,6 +285,17 @@ module.exports = {
         } catch (error) {
             console.error('Error in gamble command:', error);
 
+            if (wagerTaken && !wagerResolved) {
+                await EconomyManager.applyWalletTransaction(
+                    message.author.id,
+                    message.guild.id,
+                    wagerTaken,
+                    {
+                        description: 'Gambling wager rollback',
+                        category: 'gambling'
+                    }
+                ).catch(refundError => console.error('Could not refund failed gambling wager:', refundError));
+            }
           
             const errorContainer = new ContainerBuilder()
                 .setAccentColor(0xE74C3C);

@@ -175,7 +175,7 @@ const heistCollectionSchema = new mongoose.Schema({
 const transactionSchema = new mongoose.Schema({
     type: {
         type: String,
-        enum: ['income', 'expense', 'transfer', 'investment', 'trade', 'racing', 'robbery', 'family_work', 'gambling', 'shop'], // ✅ FIXED: family_work
+        enum: ['income', 'expense', 'transfer', 'investment', 'trade', 'racing', 'robbery', 'family_work', 'gambling', 'shop'],
         required: true
     },
     amount: { type: Number, required: true },
@@ -183,6 +183,14 @@ const transactionSchema = new mongoose.Schema({
     category: String,
     timestamp: { type: Date, default: Date.now }
 });
+
+const blackjackSessionSchema = new mongoose.Schema({
+    sessionId: String,
+    bet: { type: Number, min: 1 },
+    playerCards: [String],
+    dealerCards: [String],
+    startedAt: Date
+}, { _id: false });
 
 const carSchema = new mongoose.Schema({
     carId: String,
@@ -416,6 +424,8 @@ const economySchema = new mongoose.Schema({
         heist: Date,
         hunt: Date // ✅ ADDED hunt cooldown
     },
+
+    blackjackSession: { type: blackjackSessionSchema, default: null },
     
     dailyStreak: { type: Number, default: 0 },
     transactions: [transactionSchema],

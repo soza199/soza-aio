@@ -14,7 +14,13 @@
 -------------------------------------
 > © 2025 GlaceYT.com | All rights reserved.
 */
-const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const {
+    SlashCommandBuilder,
+    MessageFlags,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
+} = require('discord.js');
 const {
     ContainerBuilder,
     SectionBuilder,
@@ -24,7 +30,290 @@ const {
     SeparatorSpacingSize
 } = require('discord.js');
 const cmdIcons = require('../../UI/icons/commandicons');
+const { Economy, EconomyManager } = require('../../models/economy/economy');
+const activeBlackjackCollectors = new Map();
+const GAMBLING_COOLDOWN = 30 * 1000;
+const MAX_BET = 1000000;
 
+function economyPanel(title, body, color = 0x3498db) {
+    return new ContainerBuilder()
+        .setAccentColor(color)
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${title}\n\n${body}`));
+}
+
+function formatCoins(amount) {
+    return `${Math.floor(amount || 0).toLocaleString()} coins`;
+}
+
+async function takeGameBet(interaction, amount, description, extraSet = {}) {
+    if (!interaction.guildId) return { error: 'Server coin games can only be played inside a server.' };
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > MAX_BET) {
+        return { error: `Bet must be between 1 and ${MAX_BET.toLocaleString()} coins.` };
+    }
+
+    const profile = await EconomyManager.getProfile(interaction.user.id, interaction.guildId);
+    if (profile.blackjackSession) {
+        return { error: 'Finish your active blackjack hand before starting another game.' };
+    }
+
+    const cooldown = EconomyManager.checkCooldown(profile, 'gambling');
+    if (cooldown.onCooldown) {
+        return { error: `Please wait ${cooldown.timeLeft.seconds}s before your next gambling game.` };
+    }
+    if (profile.wallet < amount) {
+        return { error: `You have ${formatCoins(profile.wallet)} in your wallet, which is not enough for that bet.` };
+    }
+
+    const updated = await EconomyManager.applyWalletTransaction(
+        interaction.user.id,
+        interaction.guildId,
+        -amount,
+        {
+            description,
+            category: 'gambling',
+            cooldownName: 'gambling',
+            cooldownMs: GAMBLING_COOLDOWN,
+            extraSet,
+            requireNoBlackjackSession: true
+        }
+    );
+
+    if (!updated) {
+        const latest = await EconomyManager.getProfile(interaction.user.id, interaction.guildId);
+        const latestCooldown = EconomyManager.checkCooldown(latest, 'gambling');
+        if (latestCooldown.onCooldown) {
+            return { error: `Please wait ${latestCooldown.timeLeft.seconds}s before your next gambling game.` };
+        }
+        if (latest.blackjackSession) {
+            return { error: 'Finish your active blackjack hand before starting another game.' };
+        }
+        return { error: 'Your wallet changed before the bet could be placed. Please try again.' };
+    }
+    return { profile: updated };
+}
+
+async function creditGamePayout(interaction, amount, description, extraSet = {}, blackjackSessionId) {
+    return EconomyManager.applyWalletTransaction(
+        interaction.user.id,
+        interaction.guildId,
+        amount,
+        {
+            description,
+            category: 'gambling',
+            extraSet,
+            transaction: amount > 0,
+            blackjackSessionId
+        }
+    );
+}
+
+const blackjackRanks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const blackjackSuits = ['♠', '♥', '♦', '♣'];
+
+function drawBlackjackCard(excluded = []) {
+    const deck = blackjackRanks.flatMap(rank => blackjackSuits.map(suit => `${rank}${suit}`))
+        .filter(card => !excluded.includes(card));
+    return deck[Math.floor(Math.random() * deck.length)];
+}
+
+function blackjackHandValue(cards) {
+    let total = 0;
+    let aces = 0;
+    for (const card of cards) {
+        const rank = card.slice(0, -1);
+        if (rank === 'A') {
+            total += 11;
+            aces += 1;
+        } else if (['J', 'Q', 'K'].includes(rank)) {
+            total += 10;
+        } else {
+            total += Number(rank);
+        }
+    }
+    while (total > 21 && aces > 0) {
+        total -= 10;
+        aces -= 1;
+    }
+    return total;
+}
+
+function isBlackjack(cards) {
+    return cards.length === 2 && blackjackHandValue(cards) === 21;
+}
+
+function blackjackButtons(userId, disabled = false) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`blackjack:hit:${userId}`)
+            .setLabel('Hit')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(disabled),
+        new ButtonBuilder()
+            .setCustomId(`blackjack:stand:${userId}`)
+            .setLabel('Stand')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disabled)
+    );
+}
+
+function blackjackPanel(session, revealDealer = false, footer = '') {
+    const dealerCards = revealDealer
+        ? `${session.dealerCards.join('  ')}  **(${blackjackHandValue(session.dealerCards)})**`
+        : `${session.dealerCards[0]}  🂠`;
+    return economyPanel(
+        '🃏 Blackjack',
+        `**Your hand:** ${session.playerCards.join('  ')}  **(${blackjackHandValue(session.playerCards)})**\n` +
+        `**Dealer:** ${dealerCards}\n**Bet:** ${formatCoins(session.bet)}\n\n` +
+        (footer || 'Choose **Hit** or **Stand**. Your hand will be saved if the bot restarts.'),
+        0x1abc9c
+    );
+}
+
+async function settleBlackjack(interaction, session, componentInteraction = null, expired = false) {
+    const playerValue = blackjackHandValue(session.playerCards);
+    const playerNatural = isBlackjack(session.playerCards);
+    const dealerNatural = isBlackjack(session.dealerCards);
+
+    if (!expired && !playerNatural && playerValue <= 21) {
+        while (blackjackHandValue(session.dealerCards) < 17) {
+            session.dealerCards.push(drawBlackjackCard([
+                ...session.playerCards,
+                ...session.dealerCards
+            ]));
+        }
+    }
+
+    const dealerValue = blackjackHandValue(session.dealerCards);
+    let payout = 0;
+    let result = 'You busted and lost your bet.';
+    let color = 0xe74c3c;
+
+    if (expired) {
+        payout = session.bet;
+        result = 'This hand expired before it was played. Your bet has been returned.';
+        color = 0xf39c12;
+    } else if (playerNatural && dealerNatural) {
+        payout = session.bet;
+        result = 'Push — your bet is returned.';
+        color = 0xf1c40f;
+    } else if (playerValue > 21) {
+        result = `You busted at ${playerValue}. Your bet is lost.`;
+    } else if (dealerNatural && !playerNatural) {
+        result = 'Dealer has blackjack. Your bet is lost.';
+    } else if (playerNatural) {
+        payout = Math.floor(session.bet * 2.5);
+        result = `Blackjack! You received ${formatCoins(payout)} (2.5×).`;
+        color = 0x2ecc71;
+    } else if (playerValue <= 21 && (dealerValue > 21 || playerValue > dealerValue)) {
+        payout = session.bet * 2;
+        result = `You win and received ${formatCoins(payout)} (2×).`;
+        color = 0x2ecc71;
+    } else if (playerValue === dealerValue) {
+        payout = session.bet;
+        result = 'Push — your bet is returned.';
+        color = 0xf1c40f;
+    } else if (playerValue <= 21 && playerValue < dealerValue) {
+        result = `Dealer wins (${dealerValue}). Your bet is lost.`;
+    }
+
+    const profile = await creditGamePayout(
+        interaction,
+        payout,
+        expired ? 'Blackjack expired bet refund' : 'Blackjack payout',
+        { blackjackSession: null },
+        session.sessionId
+    );
+    if (!profile) {
+        throw new Error('Blackjack hand was already settled or its saved session changed.');
+    }
+
+    const resultPanel = economyPanel(
+        expired ? '⏳ Blackjack hand refunded' : '🃏 Blackjack result',
+        `**Your hand:** ${session.playerCards.join('  ')} (${playerValue})\n` +
+        `**Dealer:** ${session.dealerCards.join('  ')} (${dealerValue})\n\n` +
+        `${result}\n**Wallet:** ${formatCoins(profile.wallet)}`,
+        color
+    );
+
+    if (componentInteraction && !componentInteraction.deferred && !componentInteraction.replied) {
+        await componentInteraction.deferUpdate();
+    }
+    await interaction.editReply({
+        components: [resultPanel],
+        flags: MessageFlags.IsComponentsV2
+    });
+}
+
+async function openBlackjackCollector(interaction, session) {
+    const sessionKey = `${interaction.guildId}:${interaction.user.id}`;
+    if (activeBlackjackCollectors.has(sessionKey)) return;
+
+    const message = await interaction.editReply({
+        components: [blackjackPanel(session), blackjackButtons(interaction.user.id)],
+        flags: MessageFlags.IsComponentsV2
+    });
+    const collector = message.createMessageComponentCollector({
+        filter: component => component.customId.startsWith(`blackjack:`),
+        time: 2 * 60 * 1000
+    });
+    activeBlackjackCollectors.set(sessionKey, collector);
+
+    let busy = false;
+    collector.on('collect', async component => {
+        if (component.user.id !== interaction.user.id) {
+            return component.reply({ content: 'This blackjack hand belongs to another player.', ephemeral: true });
+        }
+        if (busy) {
+            return component.reply({ content: 'Your previous move is still processing.', ephemeral: true });
+        }
+        busy = true;
+        try {
+            await component.deferUpdate();
+            if (component.customId === `blackjack:hit:${interaction.user.id}`) {
+                session.playerCards.push(drawBlackjackCard([
+                    ...session.playerCards,
+                    ...session.dealerCards
+                ]));
+                await Economy.updateOne(
+                    { userId: interaction.user.id, guildId: interaction.guildId, 'blackjackSession.sessionId': session.sessionId },
+                    { $set: { blackjackSession: session, updatedAt: new Date() } }
+                );
+
+                if (blackjackHandValue(session.playerCards) >= 21) {
+                    await settleBlackjack(interaction, session, component);
+                    collector.stop('settled');
+                } else {
+                    await interaction.editReply({
+                        components: [blackjackPanel(session), blackjackButtons(interaction.user.id)],
+                        flags: MessageFlags.IsComponentsV2
+                    });
+                }
+            } else if (component.customId === `blackjack:stand:${interaction.user.id}`) {
+                await settleBlackjack(interaction, session, component);
+                collector.stop('settled');
+            }
+        } catch (error) {
+            console.error('Blackjack move failed:', error);
+            await interaction.editReply({
+                components: [blackjackPanel(session, false, 'The move could not be confirmed. Run /fun blackjack again to resume this saved hand.')],
+                flags: MessageFlags.IsComponentsV2
+            }).catch(() => {});
+        } finally {
+            busy = false;
+        }
+    });
+
+    collector.on('end', async (_collected, reason) => {
+        activeBlackjackCollectors.delete(sessionKey);
+        if (reason === 'time') {
+            try {
+                await settleBlackjack(interaction, session);
+            } catch (error) {
+                console.error('Blackjack timeout settlement failed:', error);
+            }
+        }
+    });
+}
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('fun')
@@ -146,10 +435,46 @@ module.exports = {
                         .setRequired(false)))
         .addSubcommand(subcommand =>
             subcommand.setName('slots')
-                .setDescription('🎰 Play slot machine'))
+                .setDescription('🎰 Bet server coins on the slot machine')
+                .addIntegerOption(option =>
+                    option.setName('bet')
+                        .setDescription('Coins to bet (defaults to 100)')
+                        .setMinValue(1)
+                        .setMaxValue(MAX_BET)))
         .addSubcommand(subcommand =>
             subcommand.setName('lottery')
-                .setDescription('🎫 Play the lottery'))
+                .setDescription('🎫 Buy a lottery draw with server coins')
+                .addIntegerOption(option =>
+                    option.setName('bet')
+                        .setDescription('Ticket cost / bet (defaults to 100)')
+                        .setMinValue(1)
+                        .setMaxValue(MAX_BET)))
+        .addSubcommand(subcommand =>
+            subcommand.setName('coinflip')
+                .setDescription('🪙 Bet server coins on a coin toss')
+                .addIntegerOption(option =>
+                    option.setName('bet')
+                        .setDescription('Coins to bet')
+                        .setRequired(true)
+                        .setMinValue(1)
+                        .setMaxValue(MAX_BET))
+                .addStringOption(option =>
+                    option.setName('side')
+                        .setDescription('Choose your side')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Heads', value: 'heads' },
+                            { name: 'Tails', value: 'tails' }
+                        )))
+        .addSubcommand(subcommand =>
+            subcommand.setName('blackjack')
+                .setDescription('🃏 Play blackjack for server coins')
+                .addIntegerOption(option =>
+                    option.setName('bet')
+                        .setDescription('Coins to bet')
+                        .setRequired(true)
+                        .setMinValue(1)
+                        .setMaxValue(MAX_BET)))
         .addSubcommand(subcommand =>
             subcommand.setName('gender')
                 .setDescription('⚧️ Guess someone\'s gender (for fun!)')
@@ -225,9 +550,9 @@ module.exports = {
 
         await interaction.deferReply();
 
-        const sendReply = async (components) => {
+        const sendReply = async (components, extraComponents = []) => {
             return await interaction.editReply({
-                components: [components],
+                components: [components, ...extraComponents],
                 flags: MessageFlags.IsComponentsV2
             });
         };
@@ -251,6 +576,8 @@ module.exports = {
                 case 'howgay': return await this.handleHowGay(interaction, sendReply);
                 case 'slots': return await this.handleSlots(interaction, sendReply);
                 case 'lottery': return await this.handleLottery(interaction, sendReply);
+                case 'coinflip': return await this.handleCoinflip(interaction, sendReply);
+                case 'blackjack': return await this.handleBlackjack(interaction, sendReply);
                 case 'gender': return await this.handleGender(interaction, sendReply);
                 case 'age': return await this.handleAge(interaction, sendReply);
                 case 'kill': return await this.handleKill(interaction, sendReply);
@@ -817,33 +1144,151 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
     },
 
     async handleSlots(interaction, sendReply) {
+        const bet = interaction.options.getInteger('bet') || 100;
+        const wager = await takeGameBet(interaction, bet, 'Slots wager');
+        if (wager.error) {
+            return sendReply(economyPanel('🎰 Slots unavailable', wager.error, 0xe74c3c));
+        }
+
         const symbols = ['🍒', '🍋', '🍇', '🔔', '⭐', '💎', '7️⃣'];
         const results = [
             symbols[Math.floor(Math.random() * symbols.length)],
             symbols[Math.floor(Math.random() * symbols.length)],
             symbols[Math.floor(Math.random() * symbols.length)]
         ];
-        
-        const isJackpot = results[0] === results[1] && results[1] === results[2];
-        const isWin = results[0] === results[1] || results[1] === results[2] || results[0] === results[2];
-        const payout = isJackpot ? 1000 : isWin ? 100 : 0;
 
-        const slotsContainer = new ContainerBuilder()
-            .setAccentColor(isJackpot ? 0xffd700 : isWin ? 0x00ff00 : 0xff0000)
-            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# 🎰 Casino Slot Machine\n## ${isJackpot ? 'JACKPOT!!!' : isWin ? 'WINNER!' : 'Try Again!'}\n\n**Results:** ${results.join(' | ')}\n\n**Payout:** ${payout} coins\n\n${isJackpot ? '🎉 INCREDIBLE! You hit the JACKPOT! 🎉' : isWin ? '💰 Congratulations! You won!' : '😔 Better luck next time!'}\n\n**Your Luck Today:** ${Math.floor(Math.random() * 100)}%`));
+        const isJackpot = results[0] === results[1] && results[1] === results[2];
+        const hasPair = !isJackpot && (
+            results[0] === results[1] || results[1] === results[2] || results[0] === results[2]
+        );
+        const multiplier = isJackpot ? 12 : hasPair ? 1.5 : 0;
+        const payout = Math.floor(bet * multiplier);
+        const updated = payout
+            ? await creditGamePayout(interaction, payout, `Slots payout (${multiplier}x)`)
+            : null;
+        const wallet = updated?.wallet ?? wager.profile.wallet;
+
+        const slotsContainer = economyPanel(
+            isJackpot ? '🎰 Jackpot!' : hasPair ? '🎰 Pair match' : '🎰 No match',
+            `**Results:** ${results.join('  |  ')}\n**Bet:** ${formatCoins(bet)}\n` +
+            `**Payout:** ${formatCoins(payout)}${payout ? ` (${multiplier}×)` : ''}\n` +
+            `**Wallet:** ${formatCoins(wallet)}\n\n` +
+            (isJackpot ? 'Three matching symbols pay 12×.' : hasPair ? 'Two matching symbols pay 1.5×.' : 'No payout this time.'),
+            isJackpot || hasPair ? 0x2ecc71 : 0xe74c3c
+        );
         return sendReply(slotsContainer);
     },
 
     async handleLottery(interaction, sendReply) {
-        const userNumbers = Array.from({length: 6}, () => Math.floor(Math.random() * 49) + 1).sort((a, b) => a - b);
-        const winningNumbers = Array.from({length: 6}, () => Math.floor(Math.random() * 49) + 1).sort((a, b) => a - b);
-        const matches = userNumbers.filter(num => winningNumbers.includes(num)).length;
-        const prize = matches >= 4 ? Math.pow(10, matches) : 0;
+        const bet = interaction.options.getInteger('bet') || 100;
+        const wager = await takeGameBet(interaction, bet, 'Lottery ticket');
+        if (wager.error) {
+            return sendReply(economyPanel('🎫 Lottery unavailable', wager.error, 0xe74c3c));
+        }
 
-        const lotteryContainer = new ContainerBuilder()
-            .setAccentColor(matches >= 4 ? 0xffd700 : 0x3498db)
-            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# 🎫 Mega Lottery Results\n## Drawing Complete!\n\n**Your Numbers:** ${userNumbers.join(' - ')}\n**Winning Numbers:** ${winningNumbers.join(' - ')}\n\n**Matches:** ${matches}/6\n**Prize:** $${prize.toLocaleString()}\n\n${matches === 6 ? '🎉 JACKPOT WINNER! You\'re a millionaire!' : matches >= 4 ? '💰 Big winner! Congratulations!' : matches >= 2 ? '🎁 Small prize winner!' : '😔 Better luck next week!'}`));
+        const draw = () => {
+            const values = new Set();
+            while (values.size < 6) values.add(Math.floor(Math.random() * 49) + 1);
+            return [...values].sort((a, b) => a - b);
+        };
+        const userNumbers = draw();
+        const winningNumbers = draw();
+        const matches = userNumbers.filter(num => winningNumbers.includes(num)).length;
+        const multipliers = { 3: 2, 4: 10, 5: 100, 6: 1000 };
+        const multiplier = multipliers[matches] || 0;
+        const prize = Math.floor(bet * multiplier);
+        const updated = prize
+            ? await creditGamePayout(interaction, prize, `Lottery payout (${matches} matches)`)
+            : null;
+        const wallet = updated?.wallet ?? wager.profile.wallet;
+
+        const lotteryContainer = economyPanel(
+            matches === 6 ? '🎫 Lottery jackpot!' : multiplier ? '🎫 Lottery prize' : '🎫 Lottery results',
+            `**Your numbers:** ${userNumbers.join(' · ')}\n` +
+            `**Winning numbers:** ${winningNumbers.join(' · ')}\n` +
+            `**Matches:** ${matches}/6\n**Ticket:** ${formatCoins(bet)}\n` +
+            `**Payout:** ${formatCoins(prize)}${multiplier ? ` (${multiplier}×)` : ''}\n` +
+            `**Wallet:** ${formatCoins(wallet)}`,
+            multiplier ? 0xf1c40f : 0x3498db
+        );
         return sendReply(lotteryContainer);
+    },
+
+    async handleCoinflip(interaction, sendReply) {
+        const bet = interaction.options.getInteger('bet');
+        const side = interaction.options.getString('side');
+        const wager = await takeGameBet(interaction, bet, 'Coinflip wager');
+        if (wager.error) {
+            return sendReply(economyPanel('🪙 Coinflip unavailable', wager.error, 0xe74c3c));
+        }
+
+        const result = Math.random() < 0.5 ? 'heads' : 'tails';
+        const won = result === side;
+        const payout = won ? Math.floor(bet * 1.9) : 0;
+        const updated = payout
+            ? await creditGamePayout(interaction, payout, 'Coinflip payout')
+            : null;
+        const wallet = updated?.wallet ?? wager.profile.wallet;
+
+        return sendReply(economyPanel(
+            won ? '🪙 You won the toss' : '🪙 The toss went the other way',
+            `**Your call:** ${side}\n**Result:** ${result}\n**Bet:** ${formatCoins(bet)}\n` +
+            `**Payout:** ${formatCoins(payout)}${won ? ' (1.9×)' : ''}\n**Wallet:** ${formatCoins(wallet)}`,
+            won ? 0x2ecc71 : 0xe74c3c
+        ));
+    },
+
+    async handleBlackjack(interaction, sendReply) {
+        if (!interaction.guildId) {
+            return sendReply(economyPanel('🃏 Blackjack unavailable', 'Server coin games can only be played inside a server.', 0xe74c3c));
+        }
+        const userId = interaction.user.id;
+        const guildId = interaction.guildId;
+        const sessionKey = `${guildId}:${userId}`;
+        const profile = await EconomyManager.getProfile(userId, guildId);
+
+        if (profile.blackjackSession) {
+            const session = profile.blackjackSession.toObject
+                ? profile.blackjackSession.toObject()
+                : { ...profile.blackjackSession };
+            const age = Date.now() - new Date(session.startedAt || 0).getTime();
+            if (age > 24 * 60 * 60 * 1000) {
+                await settleBlackjack(interaction, session, null, true);
+                return;
+            }
+            if (activeBlackjackCollectors.has(sessionKey)) {
+                return sendReply(economyPanel(
+                    '🃏 Hand already active',
+                    'Use the Hit and Stand buttons on your current blackjack message.',
+                    0xf1c40f
+                ));
+            }
+            return openBlackjackCollector(interaction, session);
+        }
+
+        const bet = interaction.options.getInteger('bet');
+        const sessionId = interaction.id;
+        const cards = [];
+        while (cards.length < 4) cards.push(drawBlackjackCard(cards));
+        const session = {
+            sessionId,
+            bet,
+            playerCards: [cards[0], cards[2]],
+            dealerCards: [cards[1], cards[3]],
+            startedAt: new Date()
+        };
+
+        const wager = await takeGameBet(interaction, bet, 'Blackjack wager', {
+            blackjackSession: session
+        });
+        if (wager.error) {
+            return sendReply(economyPanel('🃏 Blackjack unavailable', wager.error, 0xe74c3c));
+        }
+
+        if (isBlackjack(session.playerCards) || isBlackjack(session.dealerCards)) {
+            return settleBlackjack(interaction, session);
+        }
+        return openBlackjackCollector(interaction, session);
     },
 
     async handleGender(interaction, sendReply) {

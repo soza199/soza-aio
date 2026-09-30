@@ -109,6 +109,60 @@ class EconomyManager {
         return profile;
     }
 
+    // Apply a wallet change in MongoDB so simultaneous commands cannot spend
+    // the same balance or claim the same cooldown twice.
+    static async applyWalletTransaction(userId, guildId, amount, options = {}) {
+        if (!Number.isSafeInteger(amount)) {
+            throw new TypeError('Wallet transaction amount must be a safe integer');
+        }
+
+        await this.getProfile(userId, guildId);
+
+        const now = new Date();
+        const filter = { userId, guildId };
+        if (amount < 0) filter.wallet = { $gte: Math.abs(amount) };
+        if (options.requireNoBlackjackSession) filter.blackjackSession = null;
+        if (options.blackjackSessionId) {
+            filter['blackjackSession.sessionId'] = options.blackjackSessionId;
+        }
+
+        if (options.cooldownName && options.cooldownMs) {
+            const cooldownPath = `cooldowns.${options.cooldownName}`;
+            filter.$and = [{
+                $or: [
+                    { [cooldownPath]: null },
+                    { [cooldownPath]: { $lte: new Date(now.getTime() - options.cooldownMs) } }
+                ]
+            }];
+        }
+
+        const update = {
+            $inc: { wallet: amount, ...(options.extraInc || {}) },
+            $set: { updatedAt: now, ...(options.extraSet || {}) }
+        };
+
+        if (options.cooldownName) {
+            update.$set[`cooldowns.${options.cooldownName}`] = now;
+        }
+
+        if (options.transaction !== false) {
+            update.$push = {
+                transactions: {
+                    type: amount >= 0 ? 'income' : 'expense',
+                    amount: Math.abs(amount),
+                    description: options.description || 'Wallet transaction',
+                    category: options.category || 'economy',
+                    timestamp: now
+                }
+            };
+        }
+
+        return Economy.findOneAndUpdate(filter, update, {
+            new: true,
+            runValidators: true
+        });
+    }
+
     // Update bank
     static async updateBank(userId, guildId, amount) {
         const profile = await this.getProfile(userId, guildId);
