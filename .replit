@@ -5,3 +5,8 @@ channel = "stable-25_05"
 
 [agent]
 expertMode = true
+
+[userenv]
+
+[userenv.shared]
+DISCORD_USER_ID = "1015128735416061952"
