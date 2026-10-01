@@ -14,6 +14,7 @@ function money(value) {
 
 module.exports = {
     category: 'fun',
+    registerGuildOnly: true,
     data: new SlashCommandBuilder()
         .setName('addcash')
         .setDescription('Add cash to a user (bot creator only)')

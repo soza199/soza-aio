@@ -8,6 +8,7 @@ module.exports = async (client, config, colors) => {
     const enabledCommandFolders = commandFolders.filter(folder => config.categories[folder]);
 
     const commands = [];
+    const guildCommands = [];
 
     for (const folder of enabledCommandFolders) {
         const commandFiles = fs.readdirSync(path.join(commandsPath, folder)).filter(file => file.endsWith('.js'));
@@ -22,7 +23,12 @@ module.exports = async (client, config, colors) => {
                 command.category = folder;
             }
             client.commands.set(command.data.name, command);
-            commands.push(command.data.toJSON());
+            const commandData = command.data.toJSON();
+            if (command.registerGuildOnly) {
+                guildCommands.push(commandData);
+            } else {
+                commands.push(commandData);
+            }
         }
     }
 
@@ -35,40 +41,60 @@ module.exports = async (client, config, colors) => {
     const applicationId = client.application?.id || client.user.id;
     const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
     const globalRoute = Routes.applicationCommands(applicationId);
-    const guildRoute = guildId
-        ? Routes.applicationGuildCommands(applicationId, guildId)
-        : null;
-    const commandRoute = guildRoute || globalRoute;
-    const registrationScope = guildId
-        ? `server ${guildId}`
-        : 'global (may take up to an hour to appear)';
 
     try {
-        const registeredCommands = await rest.get(commandRoute);
+        const registeredCommands = await rest.get(globalRoute);
 
         console.log('\n' + '─'.repeat(40));
         console.log(`${colors.yellow}${colors.bright}⚡ SLASH COMMANDS${colors.reset}`);
         console.log('─'.repeat(40));
-        console.log(`${colors.cyan}[ SCOPE  ]${colors.reset} Registering commands for ${registrationScope}`);
+        console.log(`${colors.cyan}[ SCOPE  ]${colors.reset} Registering ${commands.length} standard commands globally (may take up to an hour to appear)`);
 
         if (registeredCommands.length !== commands.length) {
             console.log(`${colors.red}[ LOADER ]${colors.reset} ${colors.green}Loading Slash Commands 🛠️${colors.reset}`);
         }
 
-        // A previous deployment may have registered the same commands globally.
-        // Clear that old scope when using a guild scope so Discord does not show
-        // every command twice.
-        if (guildRoute) {
-            await rest.put(globalRoute, { body: [] });
-            console.log(`${colors.cyan}[ CLEANUP ]${colors.reset} Cleared stale global slash commands`);
+        if (commands.length > 100) {
+            throw new Error(`This app has ${commands.length} global commands; Discord allows at most 100.`);
         }
 
-        await rest.put(
-            commandRoute,
-            { body: commands }
-        );
+        // Keep public commands global. Creator-only commands use a guild scope
+        // so they do not consume one of Discord's 100 global command slots.
+        await rest.put(globalRoute, { body: commands });
+        console.log(`${colors.green}[ LOADER ] Successfully loaded ${commands.length} global slash commands ✅${colors.reset}`);
 
-        console.log(`${colors.red}[ LOADER ]${colors.reset} ${colors.green}Successfully loaded ${commands.length} slash commands ✅${colors.reset}`);
+        if (guildCommands.length && !guildId) {
+            console.log(
+                `${colors.yellow}[ OWNER  ] Creator-only commands were not registered. Set DISCORD_GUILD_ID to the target server ID.${colors.reset}`
+            );
+        } else if (guildCommands.length) {
+            const guildRoute = Routes.applicationGuildCommands(applicationId, guildId);
+            try {
+                const registeredGuildCommands = await rest.get(guildRoute);
+                for (const command of guildCommands) {
+                    const existing = registeredGuildCommands.find(registered =>
+                        registered.name === command.name &&
+                        (registered.type ?? 1) === (command.type ?? 1)
+                    );
+
+                    if (existing) {
+                        await rest.patch(
+                            Routes.applicationGuildCommand(applicationId, guildId, existing.id),
+                            { body: command }
+                        );
+                    } else {
+                        await rest.post(guildRoute, { body: command });
+                    }
+                }
+                console.log(
+                    `${colors.green}[ OWNER  ] Successfully registered ${guildCommands.length} creator-only guild command(s) in ${guildId} ✅${colors.reset}`
+                );
+            } catch (error) {
+                console.log(
+                    `${colors.red}[ OWNER  ] Creator-only command registration failed: ${error.message}${colors.reset}`
+                );
+            }
+        }
     } catch (error) {
         console.log(`${colors.red}[ ERROR ]${colors.reset} ${colors.red}Slash command registration failed: ${error.message}${colors.reset}`);
         throw error;

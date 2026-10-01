@@ -41,6 +41,10 @@ Perintah lama `/economy work`, `beg`, `deposit`, `withdraw`, serta `/fun lottery
 ## Perintah pembuat bot
 
 `/addcash user amount` menambahkan hingga 1.000.000.000 cash ke pengguna. Isi `DISCORD_USER_ID`
-dengan Discord user ID pembuat bot. Command dibatasi ke admin oleh Discord, lalu bot memeriksa ID
-tersebut sebelum menambah saldo. Untuk menyembunyikannya dari admin lain juga, batasi `/addcash`
-ke pengguna pembuat bot di **Server Settings → Integrations → bot → Commands**.
+dengan Discord user ID pembuat bot. Isi juga `DISCORD_GUILD_ID` di Railway dengan ID server tempat
+command tersedia. Command hanya didaftarkan di server itu, dibatasi ke admin oleh Discord, lalu bot
+memeriksa ID pemilik sebelum menambah saldo. Untuk menyembunyikannya dari admin lain juga, batasi
+`/addcash` ke pengguna pembuat bot di **Server Settings → Integrations → bot → Commands**.
+
+Command slash lainnya tetap didaftarkan secara global. Pemisahan ini menjaga jumlah global di bawah
+batas 100 command Discord.
