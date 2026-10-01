@@ -22,3 +22,18 @@ Command diketik **tanpa titik**, langsung di chat. Semua pengaturan ada di `fune
 - `funeconomy/index.js` - dispatcher prefix `s` + loader command
 - `funeconomy/commands/*.js` - satu file per command (tambah file baru = command baru)
 - `models/funeconomy/` - schema & operasi database (taruhan diproses atomik)
+
+## Slash commands
+
+Perintah slash memakai saldo cash global yang sama:
+
+- `/economy balance [user]`
+- `/economy daily`
+- `/economy slots bet`
+- `/economy coinflip bet side`
+- `/economy give user amount`
+- `/economy leaderboard`
+- `/fun slots bet` dan `/fun coinflip bet side` juga memakai saldo cash baru.
+
+Perintah lama `/economy work`, `beg`, `deposit`, `withdraw`, serta `/fun lottery` dan
+`blackjack` tidak lagi didaftarkan. Jalankan ulang bot agar Discord memperbarui daftar slash command.

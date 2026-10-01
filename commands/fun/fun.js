@@ -31,9 +31,12 @@ const {
 } = require('discord.js');
 const cmdIcons = require('../../UI/icons/commandicons');
 const { Economy, EconomyManager } = require('../../models/economy/economy');
+const FunEconomy = require('../../models/funeconomy/economy');
+const funEconomyConfig = require('../../funeconomy/config');
+const { spinReels, multiplierFor } = require('../../funeconomy/commands/slots')._internals;
+const crypto = require('crypto');
 const activeBlackjackCollectors = new Map();
-const GAMBLING_COOLDOWN = 30 * 1000;
-const MAX_BET = 1000000;
+const MAX_BET = funEconomyConfig.MAX_BET;
 
 function economyPanel(title, body, color = 0x3498db) {
     return new ContainerBuilder()
@@ -42,69 +45,28 @@ function economyPanel(title, body, color = 0x3498db) {
 }
 
 function formatCoins(amount) {
-    return `${Math.floor(amount || 0).toLocaleString()} coins`;
+    return `${funEconomyConfig.CASH_EMOJI} ${Math.floor(amount || 0).toLocaleString()} ${funEconomyConfig.CASH_NAME}`;
 }
 
 async function takeGameBet(interaction, amount, description, extraSet = {}) {
-    if (!interaction.guildId) return { error: 'Server coin games can only be played inside a server.' };
-    if (!Number.isSafeInteger(amount) || amount < 1 || amount > MAX_BET) {
-        return { error: `Bet must be between 1 and ${MAX_BET.toLocaleString()} coins.` };
+    if (!Number.isSafeInteger(amount) || amount < funEconomyConfig.MIN_BET || amount > MAX_BET) {
+        return { error: `Bet must be between ${funEconomyConfig.MIN_BET.toLocaleString()} and ${MAX_BET.toLocaleString()} ${funEconomyConfig.CASH_NAME}.` };
     }
 
-    const profile = await EconomyManager.getProfile(interaction.user.id, interaction.guildId);
-    if (profile.blackjackSession) {
-        return { error: 'Finish your active blackjack hand before starting another game.' };
+    await FunEconomy.ensureAccount(interaction.user.id);
+    const balance = await FunEconomy.getCash(interaction.user.id);
+    if (balance < amount) {
+        return { error: `You have ${formatCoins(balance)}, which is not enough for that bet.` };
     }
 
-    const cooldown = EconomyManager.checkCooldown(profile, 'gambling');
-    if (cooldown.onCooldown) {
-        return { error: `Please wait ${cooldown.timeLeft.seconds}s before your next gambling game.` };
-    }
-    if (profile.wallet < amount) {
-        return { error: `You have ${formatCoins(profile.wallet)} in your wallet, which is not enough for that bet.` };
-    }
-
-    const updated = await EconomyManager.applyWalletTransaction(
-        interaction.user.id,
-        interaction.guildId,
-        -amount,
-        {
-            description,
-            category: 'gambling',
-            cooldownName: 'gambling',
-            cooldownMs: GAMBLING_COOLDOWN,
-            extraSet,
-            requireNoBlackjackSession: true
-        }
-    );
-
-    if (!updated) {
-        const latest = await EconomyManager.getProfile(interaction.user.id, interaction.guildId);
-        const latestCooldown = EconomyManager.checkCooldown(latest, 'gambling');
-        if (latestCooldown.onCooldown) {
-            return { error: `Please wait ${latestCooldown.timeLeft.seconds}s before your next gambling game.` };
-        }
-        if (latest.blackjackSession) {
-            return { error: 'Finish your active blackjack hand before starting another game.' };
-        }
-        return { error: 'Your wallet changed before the bet could be placed. Please try again.' };
-    }
+    const updated = await FunEconomy.deduct(interaction.user.id, amount);
+    if (!updated) return { error: 'Your balance changed before the bet could be placed. Please try again.' };
     return { profile: updated };
 }
 
 async function creditGamePayout(interaction, amount, description, extraSet = {}, blackjackSessionId) {
-    return EconomyManager.applyWalletTransaction(
-        interaction.user.id,
-        interaction.guildId,
-        amount,
-        {
-            description,
-            category: 'gambling',
-            extraSet,
-            transaction: amount > 0,
-            blackjackSessionId
-        }
-    );
+    if (amount <= 0) return null;
+    return FunEconomy.add(interaction.user.id, amount);
 }
 
 const blackjackRanks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -435,28 +397,21 @@ module.exports = {
                         .setRequired(false)))
         .addSubcommand(subcommand =>
             subcommand.setName('slots')
-                .setDescription('🎰 Bet server coins on the slot machine')
+                .setDescription('🎰 Bet cash on the new slot machine')
                 .addIntegerOption(option =>
                     option.setName('bet')
-                        .setDescription('Coins to bet (defaults to 100)')
-                        .setMinValue(1)
-                        .setMaxValue(MAX_BET)))
-        .addSubcommand(subcommand =>
-            subcommand.setName('lottery')
-                .setDescription('🎫 Buy a lottery draw with server coins')
-                .addIntegerOption(option =>
-                    option.setName('bet')
-                        .setDescription('Ticket cost / bet (defaults to 100)')
-                        .setMinValue(1)
+                        .setDescription('Cash to bet')
+                        .setRequired(funEconomyConfig.SLOTS_REQUIRE_AMOUNT)
+                        .setMinValue(funEconomyConfig.MIN_BET)
                         .setMaxValue(MAX_BET)))
         .addSubcommand(subcommand =>
             subcommand.setName('coinflip')
-                .setDescription('🪙 Bet server coins on a coin toss')
+                .setDescription('🪙 Bet cash on a coin toss')
                 .addIntegerOption(option =>
                     option.setName('bet')
-                        .setDescription('Coins to bet')
+                        .setDescription('Cash to bet')
                         .setRequired(true)
-                        .setMinValue(1)
+                        .setMinValue(funEconomyConfig.MIN_BET)
                         .setMaxValue(MAX_BET))
                 .addStringOption(option =>
                     option.setName('side')
@@ -466,15 +421,6 @@ module.exports = {
                             { name: 'Heads', value: 'heads' },
                             { name: 'Tails', value: 'tails' }
                         )))
-        .addSubcommand(subcommand =>
-            subcommand.setName('blackjack')
-                .setDescription('🃏 Play blackjack for server coins')
-                .addIntegerOption(option =>
-                    option.setName('bet')
-                        .setDescription('Coins to bet')
-                        .setRequired(true)
-                        .setMinValue(1)
-                        .setMaxValue(MAX_BET)))
         .addSubcommand(subcommand =>
             subcommand.setName('gender')
                 .setDescription('⚧️ Guess someone\'s gender (for fun!)')
@@ -575,9 +521,7 @@ module.exports = {
                 case 'iq': return await this.handleIQ(interaction, sendReply);
                 case 'howgay': return await this.handleHowGay(interaction, sendReply);
                 case 'slots': return await this.handleSlots(interaction, sendReply);
-                case 'lottery': return await this.handleLottery(interaction, sendReply);
                 case 'coinflip': return await this.handleCoinflip(interaction, sendReply);
-                case 'blackjack': return await this.handleBlackjack(interaction, sendReply);
                 case 'gender': return await this.handleGender(interaction, sendReply);
                 case 'age': return await this.handleAge(interaction, sendReply);
                 case 'kill': return await this.handleKill(interaction, sendReply);
@@ -1144,37 +1088,31 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
     },
 
     async handleSlots(interaction, sendReply) {
-        const bet = interaction.options.getInteger('bet') || 100;
-        const wager = await takeGameBet(interaction, bet, 'Slots wager');
-        if (wager.error) {
-            return sendReply(economyPanel('🎰 Slots unavailable', wager.error, 0xe74c3c));
+        const bet = interaction.options.getInteger('bet') ?? funEconomyConfig.MIN_BET;
+        if (!Number.isSafeInteger(bet) || bet < funEconomyConfig.MIN_BET || bet > MAX_BET) {
+            return sendReply(economyPanel('🎰 Slots unavailable', `Bet must be between ${funEconomyConfig.MIN_BET} and ${MAX_BET.toLocaleString()} ${funEconomyConfig.CASH_NAME}.`, 0xe74c3c));
+        }
+        await FunEconomy.ensureAccount(interaction.user.id);
+        const balance = await FunEconomy.getCash(interaction.user.id);
+        if (balance < bet) {
+            return sendReply(economyPanel('🎰 Slots unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c));
         }
 
-        const symbols = ['🍒', '🍋', '🍇', '🔔', '⭐', '💎', '7️⃣'];
-        const results = [
-            symbols[Math.floor(Math.random() * symbols.length)],
-            symbols[Math.floor(Math.random() * symbols.length)],
-            symbols[Math.floor(Math.random() * symbols.length)]
-        ];
-
-        const isJackpot = results[0] === results[1] && results[1] === results[2];
-        const hasPair = !isJackpot && (
-            results[0] === results[1] || results[1] === results[2] || results[0] === results[2]
-        );
-        const multiplier = isJackpot ? 12 : hasPair ? 1.5 : 0;
+        const results = spinReels();
+        const multiplier = multiplierFor(results);
         const payout = Math.floor(bet * multiplier);
-        const updated = payout
-            ? await creditGamePayout(interaction, payout, `Slots payout (${multiplier}x)`)
-            : null;
-        const wallet = updated?.wallet ?? wager.profile.wallet;
+        const settled = await FunEconomy.settleBet(interaction.user.id, bet, payout);
+        if (!settled) {
+            return sendReply(economyPanel('🎰 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c));
+        }
 
         const slotsContainer = economyPanel(
-            isJackpot ? '🎰 Jackpot!' : hasPair ? '🎰 Pair match' : '🎰 No match',
-            `**Results:** ${results.join('  |  ')}\n**Bet:** ${formatCoins(bet)}\n` +
+            multiplier ? '🎰 Cash payout!' : '🎰 No match',
+            `**Results:** ${results.map(symbol => symbol.emoji).join('  |  ')}\n**Bet:** ${formatCoins(bet)}\n` +
             `**Payout:** ${formatCoins(payout)}${payout ? ` (${multiplier}×)` : ''}\n` +
-            `**Wallet:** ${formatCoins(wallet)}\n\n` +
-            (isJackpot ? 'Three matching symbols pay 12×.' : hasPair ? 'Two matching symbols pay 1.5×.' : 'No payout this time.'),
-            isJackpot || hasPair ? 0x2ecc71 : 0xe74c3c
+            `**Cash:** ${formatCoins(settled.cash)}\n\n` +
+            'Payouts follow the same slot rules as the new cash economy.',
+            multiplier ? 0x2ecc71 : 0xe74c3c
         );
         return sendReply(slotsContainer);
     },
@@ -1217,23 +1155,27 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
     async handleCoinflip(interaction, sendReply) {
         const bet = interaction.options.getInteger('bet');
         const side = interaction.options.getString('side');
-        const wager = await takeGameBet(interaction, bet, 'Coinflip wager');
-        if (wager.error) {
-            return sendReply(economyPanel('🪙 Coinflip unavailable', wager.error, 0xe74c3c));
+        if (!Number.isSafeInteger(bet) || bet < funEconomyConfig.MIN_BET || bet > MAX_BET) {
+            return sendReply(economyPanel('🪙 Coinflip unavailable', `Bet must be between ${funEconomyConfig.MIN_BET} and ${MAX_BET.toLocaleString()} ${funEconomyConfig.CASH_NAME}.`, 0xe74c3c));
+        }
+        await FunEconomy.ensureAccount(interaction.user.id);
+        const balance = await FunEconomy.getCash(interaction.user.id);
+        if (balance < bet) {
+            return sendReply(economyPanel('🪙 Coinflip unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c));
         }
 
-        const result = Math.random() < 0.5 ? 'heads' : 'tails';
+        const result = crypto.randomInt(2) === 0 ? 'heads' : 'tails';
         const won = result === side;
-        const payout = won ? Math.floor(bet * 1.9) : 0;
-        const updated = payout
-            ? await creditGamePayout(interaction, payout, 'Coinflip payout')
-            : null;
-        const wallet = updated?.wallet ?? wager.profile.wallet;
+        const payout = won ? bet * 2 : 0;
+        const settled = await FunEconomy.settleBet(interaction.user.id, bet, payout);
+        if (!settled) {
+            return sendReply(economyPanel('🪙 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c));
+        }
 
         return sendReply(economyPanel(
             won ? '🪙 You won the toss' : '🪙 The toss went the other way',
             `**Your call:** ${side}\n**Result:** ${result}\n**Bet:** ${formatCoins(bet)}\n` +
-            `**Payout:** ${formatCoins(payout)}${won ? ' (1.9×)' : ''}\n**Wallet:** ${formatCoins(wallet)}`,
+            `**Payout:** ${formatCoins(payout)}${won ? ' (2×)' : ''}\n**Cash:** ${formatCoins(settled.cash)}`,
             won ? 0x2ecc71 : 0xe74c3c
         ));
     },
