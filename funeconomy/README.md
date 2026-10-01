@@ -37,3 +37,10 @@ Perintah slash memakai saldo cash global yang sama:
 
 Perintah lama `/economy work`, `beg`, `deposit`, `withdraw`, serta `/fun lottery` dan
 `blackjack` tidak lagi didaftarkan. Jalankan ulang bot agar Discord memperbarui daftar slash command.
+
+## Perintah pembuat bot
+
+`/addcash user amount` menambahkan hingga 1.000.000.000 cash ke pengguna. Isi `DISCORD_USER_ID`
+dengan Discord user ID pembuat bot. Command dibatasi ke admin oleh Discord, lalu bot memeriksa ID
+tersebut sebelum menambah saldo. Untuk menyembunyikannya dari admin lain juga, batasi `/addcash`
+ke pengguna pembuat bot di **Server Settings → Integrations → bot → Commands**.
