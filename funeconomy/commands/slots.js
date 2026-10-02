@@ -62,7 +62,7 @@ const renderSlots = (name, bet, emojis, outcome) =>
     [
         '**`__| SLOTS |__`**',
         `\`[\` ${emojis.join(' ')} \`]\` **${name}** bet ${cfg.CASH_EMOJI} ${fmt(bet)}`,
-        `\`|         |\` ${outcome}`,
+        `\u2800\`|        |\` ${outcome}`,
         '`|         |`'
     ].join('\n');
 
