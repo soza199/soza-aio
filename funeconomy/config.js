@@ -47,7 +47,7 @@ module.exports = {
 
     // Emoji coin flip
     COIN: {
-        SPINNING: '<a:coinflip:1555456034590691418>',
+        SPINNING: '<a:coinflip:1555549588943937587>',
         HEADS: '<:head:1555309600897634496>',
         TAILS: '<:tails:1555309785019318325>'
     },
