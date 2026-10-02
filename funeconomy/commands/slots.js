@@ -57,7 +57,7 @@ function spinReels() {
     return reels;
 }
 
-const BOX = '\u00A0\u00A0'; // kotak kode kosong di kiri/kanan baris reel
+const BOX = '\u00A0'; // kotak kode kosong di kiri/kanan baris reel
 const renderSlots = (name, bet, emojis, outcome) =>
     [
         '**`___SLOTS___`**',
