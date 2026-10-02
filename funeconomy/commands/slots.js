@@ -22,7 +22,7 @@ const SYMBOLS = {
     banana: { id: 'banana', emoji: E.banana },
     raspberry:    { id: 'raspberry',    emoji: E.raspberry },
     cherry:   { id: 'cherry',   emoji: E.cherry },
-    cash:     { id: 'cash',     emoji: E.cash },
+    slotcash:     { id: 'slotcash',     emoji: E.slotcash },
     jackpot:        { id: 'jackpot',        emoji: E.jackpot }
 };
 const ALL_SYMBOLS = Object.values(SYMBOLS);
@@ -31,7 +31,7 @@ const PAYOUTS = [
     { reels: ['banana', 'banana', 'banana'], multiplier: 1,  chance: 200000 },
     { reels: ['raspberry', 'raspberry', 'raspberry'],          multiplier: 2,  chance: 200000 },
     { reels: ['cherry', 'cherry', 'cherry'],       multiplier: 3,  chance: 50000 },
-    { reels: ['cash', 'cash', 'cash'],             multiplier: 4,  chance: 25000 },
+    { reels: ['slotcash', 'slotcash', 'slotcash'],             multiplier: 4,  chance: 25000 },
     { reels: ['jackpot', 'jackpot', 'jackpot'],                      multiplier: 10, chance: 10000 }
 ];
 const CHANCE_SCALE = 1000000;
