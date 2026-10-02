@@ -1,26 +1,38 @@
 const cfg = require('../config');
-const Economy = require('../../models/funeconomy/economy');
-const { fmt, send } = require('../utils');
-const { escapeMarkdown } = require('discord.js');
+const { CATEGORIES, backfillGuild } = require('../../models/funeconomy/ranking');
+const { fmt, send, errorLine, displayName } = require('../utils');
+const view = require('../rankView');
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
+// Ranking ala "owo top". Contoh: slb | slb global | slb daily 5 | slb level g | slb guild
 module.exports = {
     name: 'lb',
-    aliases: ['leaderboard'],
+    aliases: ['leaderboard', 'rank', 'ranking'],
     async execute(message, args, client) {
-        const rows = await Economy.top(10);
+        const name = displayName(message);
+        const parsed = view.parseArgs(args, { allowCount: true });
+        if (parsed.error) {
+            return send(message, errorLine(name,
+                `wrong arguments! Usage: \`${cfg.PREFIX}lb [cash|daily|level|guild] [global] [1-${cfg.RANK.MAX_COUNT}]\``));
+        }
+
+        const { category, scope, count } = parsed;
+        // Level memakai data leveling per-server; kategori lain butuh daftar server tiap user
+        if (scope === 'guild' && category !== 'level') await backfillGuild(message.guild);
+
+        const rows = await CATEGORIES[category].top({ ...view.queryOptions(message, scope), limit: count });
         if (rows.length === 0) {
-            return send(message, `${cfg.EMOJI.TOP} | Nobody has any ${cfg.CASH_NAME} yet! Try \`${cfg.PREFIX}daily\`.`);
+            return send(message, `${cfg.EMOJI.TOP} | Nobody is on this leaderboard yet! Try \`${cfg.PREFIX}daily\`.`);
         }
 
         const lines = await Promise.all(rows.map(async (row, index) => {
-            const user = await client.users.fetch(row.userId).catch(() => null);
-            const name = escapeMarkdown(user?.username ?? 'Unknown User');
+            const label = await view.resolveName(message, client, category, scope, row.id);
             const rank = MEDALS[index] ?? `\`#${index + 1}\``;
-            return `${rank} **${name}** — ${cfg.CASH_EMOJI} ${fmt(row.cash)}`;
+            return `${rank} **${label}** — ${view.valueText(category, row, scope)}`;
         }));
 
-        return send(message, `${cfg.EMOJI.TOP} | **Top ${cfg.CASH_NAME} leaderboard**\n${lines.join('\n')}`);
+        const title = view.titleText(category, scope, rows.length, message.guild.name);
+        return send(message, `${cfg.EMOJI.TOP} | **${title}**\n${lines.join('\n')}`);
     }
 };

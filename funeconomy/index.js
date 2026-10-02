@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { PermissionsBitField } = require('discord.js');
 const cfg = require('./config');
+const { touchGuild } = require('../models/funeconomy/ranking');
 
 // Muat semua command di funeconomy/commands (nama + alias)
 const commands = new Map();
@@ -33,6 +34,10 @@ async function handleFunEconomy(message, client) {
     if (!permissions?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])) {
         return false;
     }
+
+    // Catat server user (untuk ranking per-server). Kegagalan di sini tidak boleh menghentikan command.
+    await touchGuild(message.author.id, message.guild.id)
+        .catch((error) => console.error('[FUNECONOMY] touchGuild failed:', error.message));
 
     const args = (match[2] || '').trim().split(/\s+/).filter(Boolean);
     await command.execute(message, args, client);

@@ -3,6 +3,7 @@
  *
  * Command dikirim TANPA titik/prefix bot, cukup ketik langsung di chat:
  *   scash | scf <jumlah|all> [h/t] | ss <jumlah|all> | sdaily | sgive @user <jumlah> | slb
+ *   sbj <jumlah|all> | slottery [jumlah|all] | sdrop <jumlah|all> | spickup | slb [kategori] [global] [n] | smy
  */
 module.exports = {
     // Prefix semua command fun economy ("s" + nama command -> scash, scf, ss, ...)
@@ -10,11 +11,21 @@ module.exports = {
 
     // Nama & emoji mata uang. Boleh pakai emoji custom server, contoh: '<:cash:123456789012345678>'
     CASH_NAME: 'cash',
-    CASH_EMOJI: '💵',
+    CASH_EMOJI: '<:cash:1555123079406026832>',
 
     // Batas taruhan (sama seperti OwO). "all" = min(saldo, MAX_BET)
     MIN_BET: 1,
     MAX_BET: 250000,
+
+    // Cooldown per user per game (ms), mengikuti OwO (cooldown: 15000 di slots & coinflip).
+    // Dimulai saat taruhan benar-benar dipasang (salah ketik / "ss" tanpa angka tidak memicu cooldown).
+    // Dipakai bersama oleh command prefix dan slash, jadi tidak bisa dihindari lewat slash.
+    // Set 0 untuk mematikan. Command lain (cash, daily, give, lb, my, lottery, drop) tanpa cooldown.
+    COOLDOWNS: {
+        slots: 15000,
+        cf: 15000,
+        bj: 15000
+    },
 
     // Lama animasi coin flip / slots sebelum hasil muncul (ms)
     ANIMATION_MS: 3000,
@@ -35,12 +46,43 @@ module.exports = {
     // Emoji coin flip
     COIN: {
         SPINNING: '🪙',
-        HEADS: '👑',
-        TAILS: '🦅'
+        HEADS: '<:head:1555309600897634496>',
+        TAILS: '<:tails:1555309785019318325>'
     },
 
     // Emoji slot saat berputar
     SLOT_SPINNING: '🎰',
+
+    // Simbol slots. Jackpot = ⭕ 🇼 ⭕ (x10). Boleh pakai emoji custom server.
+    SLOT_EMOJI: {
+        eggplant: '🍆',
+        heart: '❤️',
+        cherry: '🍒',
+        cash: '<:cash:1555123079406026832>',
+        o: '⭕',
+        w: '🇼'
+    },
+
+    // Blackjack (sbj). Menang = bayar 2x, seri = taruhan kembali.
+    BLACKJACK: {
+        WIN_MULTIPLIER: 2,
+        HIT_EMOJI: '👊',
+        STAND_EMOJI: '🛑'
+    },
+
+    // Lottery (slottery). Satu pool global, selesai tiap pergantian hari (zona waktu di atas).
+    // Peluang menang = total taruhanmu / total pool.
+    LOTTERY: {
+        MAX_PER_LOTTERY: 250000, // batas total taruhan satu user per lottery
+        DM_LOSERS: false         // true = kirim DM ke semua peserta, bukan hanya pemenang
+    },
+
+    // Ranking (slb / smy)
+    RANK: {
+        DEFAULT_SCOPE: 'guild', // 'guild' = server ini, 'global' = semua server (pakai "global"/"g")
+        DEFAULT_COUNT: 10,
+        MAX_COUNT: 25
+    },
 
     // Emoji pesan
     EMOJI: {
@@ -48,6 +90,12 @@ module.exports = {
         DAILY: '💰',
         TIMER: '⏱',
         GIVE: '💳',
-        TOP: '🏆'
+        TOP: '🏆',
+        DROP: '💳',
+        PICKUP: '💰',
+        LOTTERY: '🎟️',
+        STREAK: '🔥',
+        LEVEL: '⭐',
+        GUILD: '🏰'
     }
 };

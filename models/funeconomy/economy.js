@@ -61,6 +61,26 @@ async function add(userId, amount) {
     }
 }
 
+/** Kredit pemenang lottery sekali per hari, termasuk bila proses mengulang setelah restart. */
+async function addLotteryPayout(userId, day, amount) {
+    await ensureAccount(userId);
+    return FunEconomy.findOneAndUpdate(
+        { userId, lotteryPayoutDays: { $ne: day } },
+        { $inc: { cash: amount }, $addToSet: { lotteryPayoutDays: day } },
+        { new: true }
+    ).lean();
+}
+
+/** Kredit hasil blackjack sekali per game; gameId tetap sama selama pemulihan berlangsung. */
+async function addBlackjackPayout(userId, gameId, amount) {
+    await ensureAccount(userId);
+    return FunEconomy.findOneAndUpdate(
+        { userId, lastBlackjackPayoutId: { $ne: String(gameId) } },
+        { $inc: { cash: amount }, $set: { lastBlackjackPayoutId: String(gameId) } },
+        { new: true }
+    ).lean();
+}
+
 /**
  * Klaim daily. `today` = nomor hari (sudah disesuaikan zona waktu).
  * `amountForStreak(streak)` menentukan hadiah.
@@ -94,4 +114,7 @@ async function top(limit = 10) {
     return FunEconomy.find({ cash: { $gt: 0 } }).sort({ cash: -1 }).limit(limit).lean();
 }
 
-module.exports = { getCash, settleBet, deduct, add, claimDaily, getLastDailyDay, top, ensureAccount };
+module.exports = {
+    getCash, settleBet, deduct, add, addLotteryPayout, addBlackjackPayout,
+    claimDaily, getLastDailyDay, top, ensureAccount
+};

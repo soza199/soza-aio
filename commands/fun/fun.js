@@ -30,6 +30,7 @@ const {
     SeparatorSpacingSize
 } = require('discord.js');
 const cmdIcons = require('../../UI/icons/commandicons');
+const funCooldown = require('../../funeconomy/cooldown');
 const { Economy, EconomyManager } = require('../../models/economy/economy');
 const FunEconomy = require('../../models/funeconomy/economy');
 const funEconomyConfig = require('../../funeconomy/config');
@@ -1098,6 +1099,11 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
             return sendReply(economyPanel('🎰 Slots unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c));
         }
 
+        const slotsWait = funCooldown.remaining('slots', interaction.user.id);
+        if (slotsWait > 0) {
+            return sendReply(economyPanel('⏱ Slow down', `Try this command again in **${funCooldown.seconds(slotsWait)}**.`, 0xf39c12));
+        }
+
         const results = spinReels();
         const multiplier = multiplierFor(results);
         const payout = Math.floor(bet * multiplier);
@@ -1105,6 +1111,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         if (!settled) {
             return sendReply(economyPanel('🎰 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c));
         }
+        funCooldown.start('slots', interaction.user.id);
 
         const slotsContainer = economyPanel(
             multiplier ? '🎰 Cash payout!' : '🎰 No match',
@@ -1164,6 +1171,11 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
             return sendReply(economyPanel('🪙 Coinflip unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c));
         }
 
+        const cfWait = funCooldown.remaining('cf', interaction.user.id);
+        if (cfWait > 0) {
+            return sendReply(economyPanel('⏱ Slow down', `Try this command again in **${funCooldown.seconds(cfWait)}**.`, 0xf39c12));
+        }
+
         const result = crypto.randomInt(2) === 0 ? 'heads' : 'tails';
         const won = result === side;
         const payout = won ? bet * 2 : 0;
@@ -1171,6 +1183,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         if (!settled) {
             return sendReply(economyPanel('🪙 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c));
         }
+        funCooldown.start('cf', interaction.user.id);
 
         return sendReply(economyPanel(
             won ? '🪙 You won the toss' : '🪙 The toss went the other way',

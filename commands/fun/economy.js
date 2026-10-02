@@ -9,6 +9,7 @@ const {
 const Economy = require('../../models/funeconomy/economy');
 const cfg = require('../../funeconomy/config');
 const { formatDuration } = require('../../funeconomy/utils');
+const cooldown = require('../../funeconomy/cooldown');
 const { dayNumber, msUntilReset, amountForStreak } =
     require('../../funeconomy/commands/daily')._internals;
 const { spinReels, multiplierFor } =
@@ -100,7 +101,7 @@ module.exports = {
                 const target = interaction.options.getUser('user') || interaction.user;
                 const balance = await Economy.getCash(target.id);
                 const name = escapeMarkdown(target.username);
-                return show(interaction, `💵 ${name}’s balance`, `**Cash:** ${money(balance)}`, 0x2ecc71);
+                return show(interaction, `${name}’s balance`, `**Cash:** ${money(balance)}`, 0x2ecc71);
             }
 
             if (subcommand === 'daily') {
@@ -138,6 +139,17 @@ module.exports = {
                     );
                 }
 
+                const game = subcommand === 'slots' ? 'slots' : 'cf';
+                const wait = cooldown.remaining(game, userId);
+                if (wait > 0) {
+                    return show(
+                        interaction,
+                        '⏱ Slow down',
+                        `Try this command again in **${cooldown.seconds(wait)}**.`,
+                        0xf39c12
+                    );
+                }
+
                 if (subcommand === 'slots') {
                     const reels = spinReels();
                     const multiplier = multiplierFor(reels);
@@ -146,6 +158,7 @@ module.exports = {
                     if (!updated) {
                         return show(interaction, '❌ Bet not placed', 'Your balance changed before the bet could be placed. Please try again.', 0xe74c3c);
                     }
+                    cooldown.start('slots', userId);
 
                     return show(
                         interaction,
@@ -165,6 +178,7 @@ module.exports = {
                 if (!updated) {
                     return show(interaction, '❌ Bet not placed', 'Your balance changed before the bet could be placed. Please try again.', 0xe74c3c);
                 }
+                cooldown.start('cf', userId);
 
                 return show(
                     interaction,

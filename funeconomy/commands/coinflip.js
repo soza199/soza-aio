@@ -1,16 +1,17 @@
 const crypto = require('crypto');
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
+const cooldown = require('../cooldown');
 const {
     fmt, displayName, sleep, isAmountToken, parseAmount, send, errorLine,
-    acquireGambleLock, releaseGambleLock
+    acquireGambleLock, releaseGambleLock, onCooldown
 } = require('../utils');
 
 const SIDES = { h: 'heads', head: 'heads', heads: 'heads', t: 'tails', tail: 'tails', tails: 'tails' };
 
 module.exports = {
     name: 'cf',
-    aliases: ['coinflip'],
+    aliases: ['coinflip', 'coin', 'flip'],
     async execute(message, args) {
         const userId = message.author.id;
         const name = displayName(message);
@@ -45,6 +46,8 @@ module.exports = {
                 return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
             }
 
+            if (onCooldown(message, 'cf')) return;
+
             // Tentukan hasil lalu simpan atomik SEBELUM animasi
             const result = crypto.randomInt(2) === 0 ? 'heads' : 'tails';
             const won = result === side;
@@ -54,6 +57,8 @@ module.exports = {
             if (!settled) {
                 return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
             }
+
+            cooldown.start('cf', userId);
 
             const header = `**${name}** spent ${cfg.CASH_EMOJI} **${fmt(bet)}** and chose **${side}**`;
             const sent = await send(message, `${header}\nThe coin spins... ${cfg.COIN.SPINNING}`);

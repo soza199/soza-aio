@@ -1,44 +1,61 @@
 const crypto = require('crypto');
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
+const cooldown = require('../cooldown');
 const {
     fmt, displayName, sleep, isAmountToken, parseAmount, send, errorLine,
-    acquireGambleLock, releaseGambleLock
+    acquireGambleLock, releaseGambleLock, onCooldown
 } = require('../utils');
 
 /**
- * Tabel slot. `weight` = peluang relatif muncul per reel, `triple` = pengali bila 3 sama.
- * Dua 🍒 (tepat dua) = x2. Selain itu kalah.
- * RTP (return to player) teoritis ~ 93.5%, peluang menang ~ 24.5%.
+ * Odds slots mengikuti OwO: peluang hasil ditentukan langsung (bukan dari peluang tiap reel).
+ *   🍆🍆🍆  x1   (20%)   -> taruhan kembali
+ *   ❤️❤️❤️  x2   (20%)
+ *   🍒🍒🍒  x3   (5%)
+ *   cash x3 (emoji cash)  x4   (2.5%)
+ *   ⭕🇼⭕  x10  (1%)
+ *   lainnya kalah (51.5%).  RTP = 95% (rata-rata -0.05x per taruhan).
+ * `chance` dalam per sejuta supaya aman dari galat desimal.
  */
-const SYMBOLS = [
-    { id: 'cherry',   emoji: '🍒',           weight: 30, triple: 5 },
-    { id: 'eggplant', emoji: '🍆',           weight: 26, triple: 8 },
-    { id: 'heart',    emoji: '❤️',           weight: 20, triple: 12 },
-    { id: 'o',        emoji: '⭕',           weight: 14, triple: 30 },
-    { id: 'cash',     emoji: cfg.CASH_EMOJI, weight: 10, triple: 100 }
-];
-const PAIR_CHERRY_MULTIPLIER = 2;
-const TOTAL_WEIGHT = SYMBOLS.reduce((sum, s) => sum + s.weight, 0);
+const E = cfg.SLOT_EMOJI;
+const SYMBOLS = {
+    eggplant: { id: 'eggplant', emoji: E.eggplant },
+    heart:    { id: 'heart',    emoji: E.heart },
+    cherry:   { id: 'cherry',   emoji: E.cherry },
+    cash:     { id: 'cash',     emoji: E.cash },
+    o:        { id: 'o',        emoji: E.o },
+    w:        { id: 'w',        emoji: E.w }
+};
+const ALL_SYMBOLS = Object.values(SYMBOLS);
 
-function pickSymbol() {
-    let roll = crypto.randomInt(TOTAL_WEIGHT);
-    for (const symbol of SYMBOLS) {
-        if (roll < symbol.weight) return symbol;
-        roll -= symbol.weight;
-    }
-    return SYMBOLS[SYMBOLS.length - 1];
+const PAYOUTS = [
+    { reels: ['eggplant', 'eggplant', 'eggplant'], multiplier: 1,  chance: 200000 },
+    { reels: ['heart', 'heart', 'heart'],          multiplier: 2,  chance: 200000 },
+    { reels: ['cherry', 'cherry', 'cherry'],       multiplier: 3,  chance: 50000 },
+    { reels: ['cash', 'cash', 'cash'],             multiplier: 4,  chance: 25000 },
+    { reels: ['o', 'w', 'o'],                      multiplier: 10, chance: 10000 }
+];
+const CHANCE_SCALE = 1000000;
+
+/** Pengali untuk tiga reel (0 = kalah). */
+function multiplierFor(reels) {
+    const ids = reels.map((s) => s.id).join(',');
+    const hit = PAYOUTS.find((p) => p.reels.join(',') === ids);
+    return hit ? hit.multiplier : 0;
 }
 
 function spinReels() {
-    return [pickSymbol(), pickSymbol(), pickSymbol()];
-}
-
-function multiplierFor(reels) {
-    const [a, b, c] = reels;
-    if (a.id === b.id && b.id === c.id) return a.triple;
-    if (reels.filter((s) => s.id === 'cherry').length === 2) return PAIR_CHERRY_MULTIPLIER;
-    return 0;
+    let roll = crypto.randomInt(CHANCE_SCALE);
+    for (const payout of PAYOUTS) {
+        if (roll < payout.chance) return payout.reels.map((id) => SYMBOLS[id]);
+        roll -= payout.chance;
+    }
+    // Kalah: acak tiga simbol, ulangi kalau kebetulan membentuk kombinasi menang.
+    let reels;
+    do {
+        reels = [0, 1, 2].map(() => ALL_SYMBOLS[crypto.randomInt(ALL_SYMBOLS.length)]);
+    } while (multiplierFor(reels) > 0);
+    return reels;
 }
 
 const BOX = '\u00A0\u00A0'; // kotak kode kosong di kiri/kanan baris reel
@@ -54,7 +71,7 @@ module.exports = {
     name: 's',
     aliases: ['slots', 'slot'],
     // diekspor untuk pengujian
-    _internals: { SYMBOLS, PAIR_CHERRY_MULTIPLIER, spinReels, multiplierFor },
+    _internals: { SYMBOLS, PAYOUTS, spinReels, multiplierFor },
     async execute(message, args) {
         const userId = message.author.id;
         const name = displayName(message);
@@ -82,6 +99,8 @@ module.exports = {
                 return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
             }
 
+            if (onCooldown(message, 'slots')) return;
+
             const reels = spinReels();
             const multiplier = multiplierFor(reels);
             const payout = bet * multiplier;
@@ -90,6 +109,8 @@ module.exports = {
             if (!settled) {
                 return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
             }
+
+            cooldown.start('slots', userId);
 
             const spinning = Array(3).fill(cfg.SLOT_SPINNING);
             const sent = await send(message, renderSlots(name, bet, spinning, ''));
