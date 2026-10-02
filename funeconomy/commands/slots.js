@@ -61,9 +61,9 @@ const BOX = '\u00A0'; // kotak kode kosong di kiri/kanan baris reel
 const renderSlots = (name, bet, emojis, outcome) =>
     [
         '**`__| SLOTS |__`**',
-        `\`${BOX}\` ${emojis.join(' ')} \`${BOX}\` **${name}** bet ${cfg.CASH_EMOJI} ${fmt(bet)}`,
-        `\`**|**         **|**\` ${outcome}`,
-        '`**|**         **|**`'
+        `\`${BOX}\`[ ${emojis.join(' ')} ]\`${BOX}\` **${name}** bet ${cfg.CASH_EMOJI} ${fmt(bet)}`,
+        `\`|         |\` ${outcome}`,
+        '`|         |`'
     ].join('\n');
 
 module.exports = {
