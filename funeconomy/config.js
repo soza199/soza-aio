@@ -55,7 +55,7 @@ module.exports = {
     // Emoji slot saat berputar
     SLOT_SPINNING: '<a:slot:1555535305019490416>',
 
-    // Simbol slots. Jackpot = <:jackpot:1555452896039014411> <:jackpot:1555452896039014411> <:jackpot:1555452896039014411> (x10). Boleh pakai emoji custom server.
+    // Simbol slots. Jackpot = <:jackpot:1555534323707285555> <:jackpot:1555534323707285555> <:jackpot:1555534323707285555> (x10). Boleh pakai emoji custom server.
     SLOT_EMOJI: {
         banana: '<:banana:1555452508229337169>',
         raspberry: '<:raspberry:1555452597970935818>',
