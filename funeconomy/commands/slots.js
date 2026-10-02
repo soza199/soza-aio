@@ -62,8 +62,8 @@ const renderSlots = (name, bet, emojis, outcome) =>
     [
         '**`__| SLOTS |__`**',
         `\`[\` ${emojis.join(' ')} \`]\` **${name}** bet ${cfg.CASH_EMOJI} ${fmt(bet)}`,
-        `\` |         |\` ${outcome}`,
-        '`|         |`'
+         `\`|        |\` ${outcome}`,
+         '`|        |`'
     ].join('\n');
 
 module.exports = {
