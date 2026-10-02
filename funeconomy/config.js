@@ -60,7 +60,7 @@ module.exports = {
         banana: '<:banana:1555452508229337169>',
         raspberry: '<:raspberry:1555452597970935818>',
         cherry: '<:cherry:1555452550847930398>',
-        cash: '<:cash:1555123079406026832>',
+        slotcash: '<:slotcash:1555467668700532807>',
         jackpot: '<:jackpot:1555452896039014411>',
     },
 
