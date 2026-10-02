@@ -9,31 +9,30 @@ const {
 
 /**
  * Odds slots mengikuti OwO: peluang hasil ditentukan langsung (bukan dari peluang tiap reel).
- *   🍆🍆🍆  x1   (20%)   -> taruhan kembali
- *   ❤️❤️❤️  x2   (20%)
- *   🍒🍒🍒  x3   (5%)
+ *   <:banana:1555452508229337169>  x1   (20%)   -> taruhan kembali
+ *   <:raspberry:1555452597970935818>  x2   (20%)
+ *   <:cherry:1555452550847930398>  x3   (5%)
  *   cash x3 (emoji cash)  x4   (2.5%)
- *   ⭕🇼⭕  x10  (1%)
+ *   <:jackpot:1555452896039014411>  x10  (1%)
  *   lainnya kalah (51.5%).  RTP = 95% (rata-rata -0.05x per taruhan).
  * `chance` dalam per sejuta supaya aman dari galat desimal.
  */
 const E = cfg.SLOT_EMOJI;
 const SYMBOLS = {
-    eggplant: { id: 'eggplant', emoji: E.eggplant },
-    heart:    { id: 'heart',    emoji: E.heart },
+    banana: { id: 'banana', emoji: E.banana },
+    raspberry:    { id: 'raspberry',    emoji: E.raspberry },
     cherry:   { id: 'cherry',   emoji: E.cherry },
     cash:     { id: 'cash',     emoji: E.cash },
-    o:        { id: 'o',        emoji: E.o },
-    w:        { id: 'w',        emoji: E.w }
+    jackpot:        { id: 'jackpot',        emoji: E.jackpot }
 };
 const ALL_SYMBOLS = Object.values(SYMBOLS);
 
 const PAYOUTS = [
-    { reels: ['eggplant', 'eggplant', 'eggplant'], multiplier: 1,  chance: 200000 },
-    { reels: ['heart', 'heart', 'heart'],          multiplier: 2,  chance: 200000 },
+    { reels: ['banana', 'banana', 'banana'], multiplier: 1,  chance: 200000 },
+    { reels: ['raspberry', 'raspberry', 'raspberry'],          multiplier: 2,  chance: 200000 },
     { reels: ['cherry', 'cherry', 'cherry'],       multiplier: 3,  chance: 50000 },
     { reels: ['cash', 'cash', 'cash'],             multiplier: 4,  chance: 25000 },
-    { reels: ['o', 'w', 'o'],                      multiplier: 10, chance: 10000 }
+    { reels: ['jackpot', 'jackpot', 'jackpot'],                      multiplier: 10, chance: 10000 }
 ];
 const CHANCE_SCALE = 1000000;
 
