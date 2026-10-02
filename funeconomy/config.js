@@ -47,22 +47,21 @@ module.exports = {
 
     // Emoji coin flip
     COIN: {
-        SPINNING: '<a:coinflip:436677458339823636>',
+        SPINNING: '<a:coinflip:1555456034590691418>',
         HEADS: '<:head:1555309600897634496>',
         TAILS: '<:tails:1555309785019318325>'
     },
 
     // Emoji slot saat berputar
-    SLOT_SPINNING: '<a:slot_gif:417473893368987649>',
+    SLOT_SPINNING: '<a:slot:1555453172288454677>',
 
-    // Simbol slots. Jackpot = ⭕ 🇼 ⭕ (x10). Boleh pakai emoji custom server.
+    // Simbol slots. Jackpot = <:jackpot:1555452896039014411> <:jackpot:1555452896039014411> <:jackpot:1555452896039014411> (x10). Boleh pakai emoji custom server.
     SLOT_EMOJI: {
-        eggplant: '🍆',
-        heart: '❤️',
-        cherry: '🍒',
+        banana: '<:banana:1555452508229337169>',
+        raspberry: '<:raspberry:1555452597970935818>',
+        cherry: '<:cherry:1555452550847930398>',
         cash: '<:cash:1555123079406026832>',
-        o: '⭕',
-        w: '🇼'
+        jackpot: '<:jackpot:1555452896039014411>',
     },
 
     // Blackjack (sbj). Menang = bayar 2x, seri = taruhan kembali.
