@@ -53,7 +53,7 @@ module.exports = {
     },
 
     // Emoji slot saat berputar
-    SLOT_SPINNING: '<a:slot:1555453172288454677>',
+    SLOT_SPINNING: '<a:slot:1555535305019490416>',
 
     // Simbol slots. Jackpot = <:jackpot:1555452896039014411> <:jackpot:1555452896039014411> <:jackpot:1555452896039014411> (x10). Boleh pakai emoji custom server.
     SLOT_EMOJI: {
