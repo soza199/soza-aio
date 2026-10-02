@@ -12,7 +12,7 @@ const {
  *   <:banana:1555452508229337169>  x1   (20%)   -> taruhan kembali
  *   <:raspberry:1555452597970935818>  x2   (20%)
  *   <:cherry:1555452550847930398>  x3   (5%)
- *   cash x3 (emoji cash)  x4   (2.5%)
+ *   <:slotcash:1555467668700532807>  x4   (2.5%)
  *   <:jackpot:1555452896039014411>  x10  (1%)
  *   lainnya kalah (51.5%).  RTP = 95% (rata-rata -0.05x per taruhan).
  * `chance` dalam per sejuta supaya aman dari galat desimal.
