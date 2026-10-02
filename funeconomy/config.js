@@ -61,7 +61,7 @@ module.exports = {
         raspberry: '<:raspberry:1555452597970935818>',
         cherry: '<:cherry:1555452550847930398>',
         slotcash: '<:slotcash:1555467668700532807>',
-        jackpot: '<:jackpot:1555452896039014411>',
+        jackpot: '<:jackpot:1555534323707285555>',
     },
 
     // Blackjack (sbj). Menang = bayar 2x, seri = taruhan kembali.
