@@ -3,7 +3,7 @@ const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
 const cooldown = require('../cooldown');
 const {
-    fmt, displayName, sleep, isAmountToken, parseAmount, send, errorLine,
+    fmt, displayName, sleep, animateSlotReels, isAmountToken, parseAmount, send, errorLine,
     acquireGambleLock, releaseGambleLock, onCooldown
 } = require('../utils');
 
@@ -112,17 +112,24 @@ module.exports = {
 
             cooldown.start('slots', userId);
 
-            const spinning = Array(3).fill(cfg.SLOT_SPINNING);
-            const sent = await send(message, renderSlots(name, bet, spinning, ''));
-            await sleep(cfg.ANIMATION_MS);
-
             const outcome = payout > 0
                 ? `and won ${cfg.CASH_EMOJI} ${fmt(payout)}`
                 : 'and won nothing... :c';
-            const finalText = renderSlots(name, bet, reels.map((s) => s.emoji), outcome);
+            let sent;
+            await animateSlotReels(reels, async (symbols, isFinal) => {
+                const content = renderSlots(name, bet, symbols, isFinal ? outcome : '');
+                if (!sent) {
+                    sent = await send(message, content);
+                    return;
+                }
 
-            await sent.edit({ content: finalText, allowedMentions: { parse: [] } })
-                .catch(() => send(message, finalText).catch(() => {}));
+                const edit = sent.edit({ content, allowedMentions: { parse: [] } });
+                if (isFinal) {
+                    await edit.catch(() => send(message, content).catch(() => {}));
+                } else {
+                    await edit.catch(() => {});
+                }
+            });
         } finally {
             releaseGambleLock(userId);
         }

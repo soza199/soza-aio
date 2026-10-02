@@ -8,7 +8,7 @@ const {
 } = require('discord.js');
 const Economy = require('../../models/funeconomy/economy');
 const cfg = require('../../funeconomy/config');
-const { formatDuration } = require('../../funeconomy/utils');
+const { formatDuration, sleep, animateSlotReels } = require('../../funeconomy/utils');
 const cooldown = require('../../funeconomy/cooldown');
 const { dayNumber, msUntilReset, amountForStreak } =
     require('../../funeconomy/commands/daily')._internals;
@@ -160,14 +160,26 @@ module.exports = {
                     }
                     cooldown.start('slots', userId);
 
-                    return show(
-                        interaction,
-                        multiplier ? '🎰 Slots win' : '🎰 Slots',
-                        `**Result:** ${reels.map(symbol => symbol.emoji).join('  |  ')}\n` +
-                        `**Bet:** ${money(bet)}\n**Payout:** ${money(payout)}${multiplier ? ` (${multiplier}×)` : ''}\n` +
-                        `**Cash left:** ${money(updated.cash)}`,
-                        multiplier ? 0x2ecc71 : 0xe74c3c
-                    );
+                    const name = escapeMarkdown(interaction.user.username);
+                    await animateSlotReels(reels, async (symbols, isFinal) => {
+                        if (!isFinal) {
+                            return show(
+                                interaction,
+                                '🎰 Slots',
+                                `**${name}** bet ${money(bet)}\n\n${symbols.join('  |  ')}`,
+                                0x3498db
+                            );
+                        }
+                        return show(
+                            interaction,
+                            multiplier ? '🎰 Slots win' : '🎰 Slots',
+                            `**Result:** ${symbols.join('  |  ')}\n` +
+                            `**Bet:** ${money(bet)}\n**Payout:** ${money(payout)}${multiplier ? ` (${multiplier}×)` : ''}\n` +
+                            `**Cash left:** ${money(updated.cash)}`,
+                            multiplier ? 0x2ecc71 : 0xe74c3c
+                        );
+                    });
+                    return;
                 }
 
                 const side = interaction.options.getString('side');
@@ -179,12 +191,24 @@ module.exports = {
                     return show(interaction, '❌ Bet not placed', 'Your balance changed before the bet could be placed. Please try again.', 0xe74c3c);
                 }
                 cooldown.start('cf', userId);
+                const name = escapeMarkdown(interaction.user.username);
+                const header = `**${name}** spent ${cfg.CASH_EMOJI} **${bet.toLocaleString('en-US')}** and chose **${side}**`;
+                const resultEmoji = result === 'heads' ? cfg.COIN.HEADS : cfg.COIN.TAILS;
+                await show(
+                    interaction,
+                    '🪙 Coinflip',
+                    `${header}\nThe coin spins... ${cfg.COIN.SPINNING}`,
+                    0x3498db
+                );
+                await sleep(cfg.COINFLIP_ANIMATION_MS);
 
+                const outcome = won
+                    ? `and you won ${cfg.CASH_EMOJI} **${(bet * 2).toLocaleString('en-US')}**!!`
+                    : 'and you lost it all... :c';
                 return show(
                     interaction,
-                    won ? '🪙 You won the toss' : '🪙 The toss went the other way',
-                    `**Your call:** ${side}\n**Result:** ${result}\n**Bet:** ${money(bet)}\n` +
-                    `**Payout:** ${money(payout)}${won ? ' (2×)' : ''}\n**Cash left:** ${money(updated.cash)}`,
+                    won ? '🪙 Coinflip won' : '🪙 Coinflip',
+                    `${header}\nThe coin spins... ${resultEmoji} ${outcome}\n\n**Cash left:** ${money(updated.cash)}`,
                     won ? 0x2ecc71 : 0xe74c3c
                 );
             }

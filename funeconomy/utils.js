@@ -9,6 +9,19 @@ const displayName = (message) =>
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function animateSlotReels(reels, onFrame) {
+    const symbols = Array(3).fill(cfg.SLOT_SPINNING);
+    const revealOrder = [0, 2, 1];
+
+    await onFrame([...symbols], false);
+    for (let step = 0; step < revealOrder.length; step += 1) {
+        await sleep(cfg.SLOT_ANIMATION_STEPS_MS[step]);
+        const reelIndex = revealOrder[step];
+        symbols[reelIndex] = reels[reelIndex].emoji;
+        await onFrame([...symbols], step === revealOrder.length - 1);
+    }
+}
+
 const NUMBER_PATTERN = /^(\d{1,3}(,\d{3})+|\d+)$/;
 
 /** Token berupa "all" atau angka (boleh "1,000")? */
@@ -94,6 +107,6 @@ const acquireGambleLock = (userId) => {
 const releaseGambleLock = (userId) => gambleLocks.delete(userId);
 
 module.exports = {
-    fmt, displayName, sleep, isAmountToken, parseAmount, formatDuration,
+    fmt, displayName, sleep, animateSlotReels, isAmountToken, parseAmount, formatDuration,
     send, sendEmbed, canEmbed, resolveBet, errorLine, onCooldown, acquireGambleLock, releaseGambleLock
 };

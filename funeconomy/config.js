@@ -27,8 +27,10 @@ module.exports = {
         bj: 15000
     },
 
-    // Lama animasi coin flip / slots sebelum hasil muncul (ms)
-    ANIMATION_MS: 3000,
+    // Durasi animasi coinflip ala OwO
+    COINFLIP_ANIMATION_MS: 2000,
+    // Durasi tiap tahap berhentinya reel slots (urutan: reel kiri, kanan, tengah)
+    SLOT_ANIMATION_STEPS_MS: [1000, 700, 1000],
 
     // true  -> "ss" tanpa angka / "ss bukti transfer" DIABAIKAN (supaya orang yang
     //          mengetik "ss" artinya screenshot tidak ikut menjalankan slots).
@@ -45,13 +47,13 @@ module.exports = {
 
     // Emoji coin flip
     COIN: {
-        SPINNING: '🪙',
+        SPINNING: '<a:coinflip:436677458339823636>',
         HEADS: '<:head:1555309600897634496>',
         TAILS: '<:tails:1555309785019318325>'
     },
 
     // Emoji slot saat berputar
-    SLOT_SPINNING: '🎰',
+    SLOT_SPINNING: '<a:slot_gif:417473893368987649>',
 
     // Simbol slots. Jackpot = ⭕ 🇼 ⭕ (x10). Boleh pakai emoji custom server.
     SLOT_EMOJI: {

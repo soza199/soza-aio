@@ -62,7 +62,7 @@ module.exports = {
 
             const header = `**${name}** spent ${cfg.CASH_EMOJI} **${fmt(bet)}** and chose **${side}**`;
             const sent = await send(message, `${header}\nThe coin spins... ${cfg.COIN.SPINNING}`);
-            await sleep(cfg.ANIMATION_MS);
+            await sleep(cfg.COINFLIP_ANIMATION_MS);
 
             const coin = result === 'heads' ? cfg.COIN.HEADS : cfg.COIN.TAILS;
             const outcome = won

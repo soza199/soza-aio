@@ -19,7 +19,8 @@ const {
     MessageFlags,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    escapeMarkdown
 } = require('discord.js');
 const {
     ContainerBuilder,
@@ -31,6 +32,7 @@ const {
 } = require('discord.js');
 const cmdIcons = require('../../UI/icons/commandicons');
 const funCooldown = require('../../funeconomy/cooldown');
+const { sleep, animateSlotReels } = require('../../funeconomy/utils');
 const { Economy, EconomyManager } = require('../../models/economy/economy');
 const FunEconomy = require('../../models/funeconomy/economy');
 const funEconomyConfig = require('../../funeconomy/config');
@@ -1113,15 +1115,24 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         }
         funCooldown.start('slots', interaction.user.id);
 
-        const slotsContainer = economyPanel(
-            multiplier ? '🎰 Cash payout!' : '🎰 No match',
-            `**Results:** ${results.map(symbol => symbol.emoji).join('  |  ')}\n**Bet:** ${formatCoins(bet)}\n` +
-            `**Payout:** ${formatCoins(payout)}${payout ? ` (${multiplier}×)` : ''}\n` +
-            `**Cash:** ${formatCoins(settled.cash)}\n\n` +
-            'Payouts follow the same slot rules as the new cash economy.',
-            multiplier ? 0x2ecc71 : 0xe74c3c
-        );
-        return sendReply(slotsContainer);
+        const name = escapeMarkdown(interaction.user.username);
+        await animateSlotReels(results, async (symbols, isFinal) => {
+            if (!isFinal) {
+                return sendReply(economyPanel(
+                    '🎰 Slots',
+                    `**${name}** bet ${formatCoins(bet)}\n\n${symbols.join('  |  ')}`,
+                    0x3498db
+                ));
+            }
+            return sendReply(economyPanel(
+                multiplier ? '🎰 Cash payout!' : '🎰 No match',
+                `**Results:** ${symbols.join('  |  ')}\n**Bet:** ${formatCoins(bet)}\n` +
+                `**Payout:** ${formatCoins(payout)}${payout ? ` (${multiplier}×)` : ''}\n` +
+                `**Cash:** ${formatCoins(settled.cash)}\n\n` +
+                'Payouts follow the same slot rules as the new cash economy.',
+                multiplier ? 0x2ecc71 : 0xe74c3c
+            ));
+        });
     },
 
     async handleLottery(interaction, sendReply) {
@@ -1184,11 +1195,22 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
             return sendReply(economyPanel('🪙 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c));
         }
         funCooldown.start('cf', interaction.user.id);
+        const name = escapeMarkdown(interaction.user.username);
+        const header = `**${name}** spent ${formatCoins(bet)} and chose **${side}**`;
+        const resultEmoji = result === 'heads' ? funEconomyConfig.COIN.HEADS : funEconomyConfig.COIN.TAILS;
+        await sendReply(economyPanel(
+            '🪙 Coinflip',
+            `${header}\nThe coin spins... ${funEconomyConfig.COIN.SPINNING}`,
+            0x3498db
+        ));
+        await sleep(funEconomyConfig.COINFLIP_ANIMATION_MS);
 
+        const outcome = won
+            ? `and you won ${formatCoins(payout)}!!`
+            : 'and you lost it all... :c';
         return sendReply(economyPanel(
-            won ? '🪙 You won the toss' : '🪙 The toss went the other way',
-            `**Your call:** ${side}\n**Result:** ${result}\n**Bet:** ${formatCoins(bet)}\n` +
-            `**Payout:** ${formatCoins(payout)}${won ? ' (2×)' : ''}\n**Cash:** ${formatCoins(settled.cash)}`,
+            won ? '🪙 Coinflip won' : '🪙 Coinflip',
+            `${header}\nThe coin spins... ${resultEmoji} ${outcome}\n\n**Cash:** ${formatCoins(settled.cash)}`,
             won ? 0x2ecc71 : 0xe74c3c
         ));
     },
