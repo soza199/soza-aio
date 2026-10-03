@@ -29,11 +29,25 @@ Contoh: `slb`, `slb global`, `slb daily 5`, `slb level g`, `slb guild`, `smy`, `
 - Ganti emoji (mis. emoji custom server) di `CASH_EMOJI`, `COIN`, `SLOT_EMOJI`, dan `SLOT_SPINNING`.
 - Ranking per-server memakai server tempat user memakai command, lalu mengisi akun lama dari daftar anggota saat ranking server dibuka.
 
+## Registrasi akun
+
+Semua command economy (prefix `s`, slash `/economy`, dan `/fun slots|coinflip|lottery|blackjack`) membutuhkan akun aktif.
+Pengguna yang belum terdaftar melihat kartu Welcome dengan tombol Register; setelah ditekan, akun aktif dan menerima bonus
+**250.000 cash**. Command lain di bot tidak terpengaruh.
+
+- Hanya pemilik kartu yang bisa menekan tombolnya. Bonus diberikan tepat sekali per pengguna.
+- Untuk prefix, kartu muncul maksimal sekali per `PROMPT_COOLDOWN_MS` per pengguna. `ss` tanpa angka tidak memicu kartu.
+- `sgive` / `/economy give` ke pengguna yang belum terdaftar ditolak.
+- Pemain lama yang sudah punya saldo atau pernah `daily` otomatis dianggap terdaftar tanpa bonus. Migrasi ini berjalan
+  sekali saat command economy pertama dipakai; matikan lewat `GRANDFATHER_EXISTING: false`.
+- Pengaturan tersedia di `REGISTRATION` pada `config.js`: `ENABLED`, `BONUS`, `GRANDFATHER_EXISTING`, `PROMPT_COOLDOWN_MS`.
+
 ## Struktur
 - `events/funEconomy.js` - listener `messageCreate` (dimuat otomatis oleh `handlers/events.js`)
 - `funeconomy/index.js` - dispatcher prefix `s` + loader command
 - `funeconomy/commands/*.js` - satu file per command (tambah file baru = command baru)
-- `events/funEconomyInteraction.js` - tombol blackjack; `events/funEconomyReady.js` - jadwal lottery
+- `funeconomy/register.js` - kartu & tombol Register, `models/funeconomy/registration.js` - logika akun
+- `events/funEconomyInteraction.js` - tombol blackjack & Register; `events/funEconomyReady.js` - jadwal lottery
 - `models/funeconomy/` - schema & operasi database (taruhan diproses atomik)
 
 ## Slash commands

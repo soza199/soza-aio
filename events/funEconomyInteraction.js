@@ -1,11 +1,17 @@
 const { BUTTON_PREFIX, handleButton } = require('../funeconomy/blackjack');
+const register = require('../funeconomy/register');
 
-// Tombol Hit / Stand blackjack. Dimuat otomatis oleh handlers/events.js.
-// Game disimpan di database, jadi tombol tetap bekerja setelah bot restart.
+// Tombol blackjack (Hit/Stand) dan Register. Dimuat otomatis oleh handlers/events.js.
 module.exports = {
     name: 'interactionCreate',
     async execute(interaction, client) {
-        if (!interaction.isButton() || !interaction.customId.startsWith(`${BUTTON_PREFIX}:`)) return;
-        await handleButton(interaction, client);
+        if (!interaction.isButton()) return;
+
+        if (interaction.customId.startsWith(`${register.BUTTON_PREFIX}:`)) {
+            return register.handleButton(interaction);
+        }
+        if (interaction.customId.startsWith(`${BUTTON_PREFIX}:`)) {
+            return handleButton(interaction, client);
+        }
     }
 };

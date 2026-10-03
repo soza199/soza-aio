@@ -1,5 +1,6 @@
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
+const Registration = require('../../models/funeconomy/registration');
 const { fmt, displayName, send, errorLine, isAmountToken, parseAmount } = require('../utils');
 const { escapeMarkdown } = require('discord.js');
 
@@ -30,6 +31,11 @@ module.exports = {
         if (target.bot) return send(message, errorLine(name, "you can't give bots any " + cfg.CASH_NAME + '!'));
         if (target.id === senderId) return send(message, errorLine(name, `you can't give ${cfg.CASH_NAME} to yourself!`));
 
+        const targetName = escapeMarkdown(message.guild.members.cache.get(target.id)?.displayName ?? target.username);
+        if (!(await Registration.isRegistered(target.id))) {
+            return send(message, errorLine(name, `**${targetName}** hasn't registered yet! They need to use any economy command first.`));
+        }
+
         const balance = await Economy.getCash(senderId);
         const amount = parseAmount(amountToken, balance);
         if (!Number.isSafeInteger(amount) || amount < 1) {
@@ -48,7 +54,6 @@ module.exports = {
             throw error;
         }
 
-        const targetName = escapeMarkdown(message.guild.members.cache.get(target.id)?.displayName ?? target.username);
         return send(message, `${cfg.EMOJI.GIVE} | **${name}** sent ${cfg.CASH_EMOJI} **${fmt(amount)}** to **${targetName}**!`);
     }
 };

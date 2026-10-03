@@ -32,6 +32,7 @@ const {
 } = require('discord.js');
 const cmdIcons = require('../../UI/icons/commandicons');
 const funCooldown = require('../../funeconomy/cooldown');
+const { registerGate } = require('../../funeconomy/register');
 const { sleep, animateSlotReels } = require('../../funeconomy/utils');
 const { Economy, EconomyManager } = require('../../models/economy/economy');
 const FunEconomy = require('../../models/funeconomy/economy');
@@ -1091,6 +1092,8 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
     },
 
     async handleSlots(interaction, sendReply) {
+        const registerPrompt = await registerGate(interaction);
+        if (registerPrompt) return sendReply(registerPrompt);
         const bet = interaction.options.getInteger('bet') ?? funEconomyConfig.MIN_BET;
         if (!Number.isSafeInteger(bet) || bet < funEconomyConfig.MIN_BET || bet > MAX_BET) {
             return sendReply(economyPanel('🎰 Slots unavailable', `Bet must be between ${funEconomyConfig.MIN_BET} and ${MAX_BET.toLocaleString()} ${funEconomyConfig.CASH_NAME}.`, 0xe74c3c));
@@ -1136,6 +1139,8 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
     },
 
     async handleLottery(interaction, sendReply) {
+        const registerPrompt = await registerGate(interaction);
+        if (registerPrompt) return sendReply(registerPrompt);
         const bet = interaction.options.getInteger('bet') || 100;
         const wager = await takeGameBet(interaction, bet, 'Lottery ticket');
         if (wager.error) {
@@ -1171,6 +1176,8 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
     },
 
     async handleCoinflip(interaction, sendReply) {
+        const registerPrompt = await registerGate(interaction);
+        if (registerPrompt) return sendReply(registerPrompt);
         const bet = interaction.options.getInteger('bet');
         const side = interaction.options.getString('side');
         if (!Number.isSafeInteger(bet) || bet < funEconomyConfig.MIN_BET || bet > MAX_BET) {
@@ -1216,6 +1223,8 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
     },
 
     async handleBlackjack(interaction, sendReply) {
+        const registerPrompt = await registerGate(interaction);
+        if (registerPrompt) return sendReply(registerPrompt);
         if (!interaction.guildId) {
             return sendReply(economyPanel('🃏 Blackjack unavailable', 'Server coin games can only be played inside a server.', 0xe74c3c));
         }

@@ -30,6 +30,16 @@ module.exports = {
         my: 15000
     },
 
+    // Registrasi akun fun economy. User baru menekan tombol Register sekali untuk mengaktifkan akun
+    // dan menerima bonus cash. Command lain di bot tidak terpengaruh.
+    REGISTRATION: {
+        ENABLED: true,
+        BONUS: 250000,
+        // Akun lama yang sudah punya saldo/daily otomatis dianggap terdaftar tanpa bonus.
+        GRANDFATHER_EXISTING: true,
+        PROMPT_COOLDOWN_MS: 15000
+    },
+
     // Durasi animasi coinflip ala OwO
     COINFLIP_ANIMATION_MS: 2000,
     // Durasi tiap tahap berhentinya reel slots (urutan: reel kiri, kanan, tengah)

@@ -71,16 +71,16 @@ module.exports = {
     aliases: ['slots', 'slot'],
     // diekspor untuk pengujian
     _internals: { SYMBOLS, PAYOUTS, spinReels, multiplierFor },
+    // "ss" tanpa angka sering berarti "screenshot" di chat; abaikan tanpa memunculkan Register.
+    ignore(args) {
+        if (cfg.SLOTS_REQUIRE_AMOUNT) return args.length === 0 || !isAmountToken(args[0]);
+        return args.length > 0 && !isAmountToken(args[0]);
+    },
     async execute(message, args) {
         const userId = message.author.id;
         const name = displayName(message);
 
-        // "ss" tanpa angka sering berarti "screenshot" di chat -> abaikan diam-diam
-        if (cfg.SLOTS_REQUIRE_AMOUNT) {
-            if (args.length === 0 || !isAmountToken(args[0])) return;
-        } else if (args.length > 0 && !isAmountToken(args[0])) {
-            return;
-        }
+        if (this.ignore(args)) return;
 
         if (!acquireGambleLock(userId)) return;
         try {

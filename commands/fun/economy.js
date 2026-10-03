@@ -7,9 +7,11 @@ const {
     escapeMarkdown
 } = require('discord.js');
 const Economy = require('../../models/funeconomy/economy');
+const Registration = require('../../models/funeconomy/registration');
 const cfg = require('../../funeconomy/config');
 const { formatDuration, sleep, animateSlotReels } = require('../../funeconomy/utils');
 const cooldown = require('../../funeconomy/cooldown');
+const { registerGate } = require('../../funeconomy/register');
 const { dayNumber, msUntilReset, amountForStreak } =
     require('../../funeconomy/commands/daily')._internals;
 const { spinReels, multiplierFor } =
@@ -97,6 +99,15 @@ module.exports = {
         const userId = interaction.user.id;
 
         try {
+            // Semua subcommand economy membutuhkan akun aktif.
+            const registerPrompt = await registerGate(interaction);
+            if (registerPrompt) {
+                return interaction.editReply({
+                    components: [registerPrompt],
+                    flags: MessageFlags.IsComponentsV2
+                });
+            }
+
             if (subcommand === 'balance') {
                 const target = interaction.options.getUser('user') || interaction.user;
                 const balance = await Economy.getCash(target.id);
@@ -221,6 +232,9 @@ module.exports = {
                 }
                 if (target.id === userId) {
                     return show(interaction, '❌ Cash not sent', `You cannot give ${cfg.CASH_NAME} to yourself.`, 0xe74c3c);
+                }
+                if (!(await Registration.isRegistered(target.id))) {
+                    return show(interaction, '❌ Cash not sent', `${escapeMarkdown(target.username)} hasn’t registered yet. They need to use any economy command first.`, 0xe74c3c);
                 }
 
                 await Economy.ensureAccount(userId);

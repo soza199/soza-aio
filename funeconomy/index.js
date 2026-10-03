@@ -3,6 +3,7 @@ const path = require('path');
 const { PermissionsBitField } = require('discord.js');
 const cfg = require('./config');
 const { touchGuild } = require('../models/funeconomy/ranking');
+const { ensureRegistered } = require('./register');
 
 // Muat semua command di funeconomy/commands (nama + alias)
 const commands = new Map();
@@ -35,11 +36,18 @@ async function handleFunEconomy(message, client) {
         return false;
     }
 
+    const args = (match[2] || '').trim().split(/\s+/).filter(Boolean);
+
+    // Command yang sengaja diabaikan (mis. "ss" tanpa angka = "screenshot") tidak menampilkan Register.
+    if (command.ignore?.(args)) return false;
+
+    // Semua command economy membutuhkan akun aktif.
+    if (!(await ensureRegistered(message, client))) return true;
+
     // Catat server user (untuk ranking per-server). Kegagalan di sini tidak boleh menghentikan command.
     await touchGuild(message.author.id, message.guild.id)
         .catch((error) => console.error('[FUNECONOMY] touchGuild failed:', error.message));
 
-    const args = (match[2] || '').trim().split(/\s+/).filter(Boolean);
     await command.execute(message, args, client);
     return true;
 }
