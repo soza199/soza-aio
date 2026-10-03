@@ -17,14 +17,17 @@ module.exports = {
     MIN_BET: 1,
     MAX_BET: 250000,
 
-    // Cooldown per user per game (ms), mengikuti OwO (cooldown: 15000 di slots & coinflip).
-    // Dimulai saat taruhan benar-benar dipasang (salah ketik / "ss" tanpa angka tidak memicu cooldown).
-    // Dipakai bersama oleh command prefix dan slash, jadi tidak bisa dihindari lewat slash.
-    // Set 0 untuk mematikan. Command lain (cash, daily, give, lb, my, lottery, drop) tanpa cooldown.
+    // Cooldown per pengguna dan command (ms). Game taruhan memakai 15 detik;
+    // cash dan daily memakai 5 detik. Set 0 untuk mematikan.
     COOLDOWNS: {
+        cash: 5000,
+        daily: 5000,
         slots: 15000,
         cf: 15000,
-        bj: 15000
+        bj: 15000,
+        lottery: 15000,
+        lb: 15000,
+        my: 15000
     },
 
     // Durasi animasi coinflip ala OwO

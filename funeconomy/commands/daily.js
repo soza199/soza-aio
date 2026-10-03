@@ -1,6 +1,7 @@
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
-const { fmt, displayName, send, errorLine, formatDuration } = require('../utils');
+const cooldown = require('../cooldown');
+const { fmt, displayName, send, errorLine, formatDuration, onCooldown } = require('../utils');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OFFSET_MS = cfg.TIMEZONE_OFFSET_HOURS * 60 * 60 * 1000;
@@ -15,9 +16,13 @@ module.exports = {
     name: 'daily',
     aliases: [],
     async execute(message) {
+        const userId = message.author.id;
+        if (onCooldown(message, 'daily')) return;
+
         const name = displayName(message);
         const now = Date.now();
-        const result = await Economy.claimDaily(message.author.id, dayNumber(now), amountForStreak);
+        const result = await Economy.claimDaily(userId, dayNumber(now), amountForStreak);
+        cooldown.start('daily', userId);
 
         if (!result.claimed) {
             return send(

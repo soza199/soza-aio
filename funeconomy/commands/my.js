@@ -1,6 +1,7 @@
 const cfg = require('../config');
 const { CATEGORIES, backfillGuild } = require('../../models/funeconomy/ranking');
-const { send, errorLine, displayName } = require('../utils');
+const cooldown = require('../cooldown');
+const { send, errorLine, displayName, onCooldown } = require('../utils');
 const { escapeMarkdown } = require('discord.js');
 const view = require('../rankView');
 
@@ -26,6 +27,7 @@ module.exports = {
         }
 
         const userId = message.author.id;
+        if (onCooldown(message, 'my')) return;
         const { scope } = parsed;
         if (scope === 'guild') await backfillGuild(message.guild);
 
@@ -45,6 +47,7 @@ module.exports = {
             }
         }
 
+        cooldown.start('my', userId);
         if (categories.length === 1) {
             return send(message, `${cfg.EMOJI.TOP} | **${name}**, your ranking in **${where}**:\n${lines[0]}`);
         }

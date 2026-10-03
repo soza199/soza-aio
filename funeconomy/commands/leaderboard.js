@@ -1,6 +1,7 @@
 const cfg = require('../config');
 const { CATEGORIES, backfillGuild } = require('../../models/funeconomy/ranking');
-const { fmt, send, errorLine, displayName } = require('../utils');
+const cooldown = require('../cooldown');
+const { fmt, send, errorLine, displayName, onCooldown } = require('../utils');
 const view = require('../rankView');
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -16,12 +17,14 @@ module.exports = {
             return send(message, errorLine(name,
                 `wrong arguments! Usage: \`${cfg.PREFIX}lb [cash|daily|level|guild] [global] [1-${cfg.RANK.MAX_COUNT}]\``));
         }
+        if (onCooldown(message, 'lb')) return;
 
         const { category, scope, count } = parsed;
         // Level memakai data leveling per-server; kategori lain butuh daftar server tiap user
         if (scope === 'guild' && category !== 'level') await backfillGuild(message.guild);
 
         const rows = await CATEGORIES[category].top({ ...view.queryOptions(message, scope), limit: count });
+        cooldown.start('lb', message.author.id);
         if (rows.length === 0) {
             return send(message, `${cfg.EMOJI.TOP} | Nobody is on this leaderboard yet! Try \`${cfg.PREFIX}daily\`.`);
         }

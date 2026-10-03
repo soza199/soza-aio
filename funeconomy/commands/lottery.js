@@ -2,9 +2,10 @@ const { EmbedBuilder } = require('discord.js');
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
 const lottery = require('../lottery');
+const cooldown = require('../cooldown');
 const {
     fmt, displayName, send, sendEmbed, canEmbed, parseAmount, isAmountToken, errorLine,
-    formatDuration, acquireGambleLock, releaseGambleLock
+    formatDuration, acquireGambleLock, releaseGambleLock, onCooldown
 } = require('../utils');
 
 const MAX = cfg.LOTTERY.MAX_PER_LOTTERY;
@@ -46,6 +47,7 @@ module.exports = {
         if (args.length > 1 || (args[0] && !isAmountToken(args[0]))) {
             return send(message, errorLine(name, `wrong arguments! Usage: \`${cfg.PREFIX}lottery [amount|all]\``));
         }
+        if (onCooldown(message, 'lottery')) return;
         if (!acquireGambleLock(userId)) return;
 
         try {
@@ -56,7 +58,10 @@ module.exports = {
             const plainName = message.member?.displayName ?? message.author.username;
 
             // Tanpa jumlah = hanya lihat status lottery
-            if (!args[0]) return sendEmbed(message, embedFor(plainName, status, 0));
+            if (!args[0]) {
+                cooldown.start('lottery', userId);
+                return sendEmbed(message, embedFor(plainName, status, 0));
+            }
 
             const remaining = MAX - status.mine;
             if (remaining <= 0) {
@@ -92,6 +97,7 @@ module.exports = {
                 return send(message, errorLine(name, `you can only bet up to **${fmt(MAX)}** per lottery!`));
             }
 
+            cooldown.start('lottery', userId);
             const updated = await lottery.getStatus(day, userId);
             return sendEmbed(message, embedFor(plainName, updated, bet));
         } finally {
