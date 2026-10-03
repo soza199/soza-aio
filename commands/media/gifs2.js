@@ -388,6 +388,9 @@ module.exports = {
     }
 };
 
+// Shared with the "soza <action>" message-prefix handler.
+module.exports.interactions = interactions;
+
 /*
  ██████╗ ██╗      █████╗  ██████╗███████╗██╗   ██╗████████╗
 ██╔════╝ ██║     ██╔══██╗██╔════╝██╔════╝╚██╗ ██╔╝╚══██╔══╝
