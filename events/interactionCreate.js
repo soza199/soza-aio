@@ -192,6 +192,19 @@ module.exports = {
             await member.send('🎉 You have been verified and can now access the server!');
         }
 
+        if (interaction.isAutocomplete()) {
+            const command = client.commands.get(interaction.commandName);
+            if (!command?.autocomplete) return;
+
+            try {
+                await command.autocomplete(interaction);
+            } catch (error) {
+                console.error(`Error handling autocomplete for /${interaction.commandName}:`, error);
+                await interaction.respond([]).catch(() => {});
+            }
+            return;
+        }
+
         if (!interaction.isCommand()) return;
 
         const command = client.commands.get(interaction.commandName);
