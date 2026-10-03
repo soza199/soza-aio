@@ -32,7 +32,7 @@ const PAYOUTS = [
     { reels: ['raspberry', 'raspberry', 'raspberry'],          multiplier: 2,  chance: 200000 },
     { reels: ['cherry', 'cherry', 'cherry'],       multiplier: 3,  chance: 50000 },
     { reels: ['slotcash', 'slotcash', 'slotcash'],             multiplier: 4,  chance: 25000 },
-    { reels: ['jackpot', 'jackpot', 'jackpot'],                      multiplier: 10, chance: 10000 }
+    { reels: ['jackpot', 'jackpot', 'jackpot'],                      multiplier: 10, chance: 15000 }
 ];
 const CHANCE_SCALE = 1000000;
 
