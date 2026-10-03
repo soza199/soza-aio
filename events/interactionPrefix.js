@@ -1,8 +1,8 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { fetchGif } = require('../utils/fetchMedia');
+const { getInteractionGif } = require('../utils/gifPool');
 
-// Prefix text for all /gif-interactions actions, e.g.:
-//   soza hug @user | soza pat <reply to a message> | soza hug (no target = self)
+// Prefix teks untuk semua aksi /gif-interactions, contoh:
+//   soza hug @user   |   soza pat <reply ke pesan>   |   soza hug (tanpa target = ke diri sendiri)
 const PREFIXES = ['soza'];
 const SLASH_COMMAND_NAME = 'gif-interactions';
 
@@ -18,11 +18,11 @@ function verbFor(action) {
 }
 
 async function resolveTarget(message, args) {
-    // 1) mention  2) ID  3) reply to another user's message
+    // 1) mention  2) ID  3) reply ke pesan orang lain
     const mentioned = message.mentions.users.first();
     if (mentioned) return mentioned;
 
-    const idArg = args.find((arg) => /^\d{17,20}$/.test(arg));
+    const idArg = args.find((a) => /^\d{17,20}$/.test(a));
     if (idArg) {
         const user = await message.client.users.fetch(idArg).catch(() => null);
         if (user) return user;
@@ -37,11 +37,11 @@ async function resolveTarget(message, args) {
 
 module.exports = {
     name: 'messageCreate',
-    async execute(message) {
+    async execute(message, client) {
         if (message.author.bot || !message.guild || !message.content) return;
 
         const content = message.content.trim();
-        // Skip messages that cannot be this command before doing database work.
+        // Cepat abaikan pesan yang jelas bukan command (sebelum menyentuh database).
         if (content.length > 200) return;
         const match = MATCHER.exec(content);
         if (!match) return;
@@ -57,17 +57,13 @@ module.exports = {
             return message.reply('❌ I need the **Embed Links** permission for this command.').catch(() => {});
         }
 
-        // Respect /manage-commands for the whole command or this subcommand.
+        // Hormati /manage-commands (nonaktifkan seluruh gif-interactions atau satu subcommand).
         try {
             const DisabledCommand = require('../models/commands/DisabledCommands');
             const disabled = await DisabledCommand.find({
                 guildId: message.guild.id,
                 commandName: SLASH_COMMAND_NAME,
-                $or: [
-                    { subcommandName: null },
-                    { subcommandName: { $exists: false } },
-                    { subcommandName: action },
-                ],
+                $or: [{ subcommandName: null }, { subcommandName: { $exists: false } }, { subcommandName: action }],
             }).limit(1).lean();
             if (disabled.length) {
                 return message.reply({
@@ -85,7 +81,7 @@ module.exports = {
 
         try {
             await message.channel.sendTyping().catch(() => {});
-            const gif = await fetchGif(interactions[action].func, action);
+            const gif = await getInteractionGif(action, message.guild.id, interactions[action].func);
 
             const description = !target || target.id === sender.id
                 ? `${sender} ${verbFor(action)} themselves!`
@@ -97,10 +93,7 @@ module.exports = {
                 .setImage(gif)
                 .setTimestamp();
 
-            await message.reply({
-                embeds: [embed],
-                allowedMentions: { repliedUser: false, users: target ? [target.id] : [] },
-            });
+            await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false, users: target ? [target.id] : [] } });
         } catch (error) {
             console.error('[INTERACTION-PREFIX] Error:', error);
             message.reply({

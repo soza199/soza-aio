@@ -17,7 +17,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { gifs } = require('mediacord');
 const cmdIcons = require('../../UI/icons/commandicons');
-const { fetchGif } = require('../../utils/fetchMedia');
+const { getInteractionGif } = require('../../utils/gifPool');
 
 const interactions = {
     airkiss: { func: gifs.sfw.airkiss, requiresTarget: true },
@@ -337,7 +337,7 @@ module.exports = {
             const target = interaction.options.getUser('user');
 
             try {
-                 const gif = await fetchGif(action?.func, subcommand);
+                 const gif = await getInteractionGif(subcommand, interaction.guildId || interaction.user.id, action?.func);
 
              
                 let verbForm;
@@ -388,7 +388,7 @@ module.exports = {
     }
 };
 
-// Shared with the "soza <action>" message-prefix handler.
+// Dipakai juga oleh events/interactionPrefix.js (prefix "soza <aksi>").
 module.exports.interactions = interactions;
 
 /*
