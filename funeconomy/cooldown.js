@@ -43,4 +43,20 @@ function check(game, userId, now = Date.now()) {
 /** 4200 -> "5s" (dibulatkan ke atas, minimal 1s) */
 const seconds = (ms) => `${Math.max(1, Math.ceil(ms / 1000))}s`;
 
-module.exports = { remaining, start, check, seconds };
+/** 8000 -> "8 seconds" (format pesan cooldown seperti OwO). */
+function formatTime(ms) {
+    let totalSeconds = Math.max(1, Math.ceil(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    totalSeconds %= 3600;
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    const parts = [];
+
+    if (hours) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+    if (minutes) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+    if (secs || parts.length === 0) parts.push(`${secs} second${secs === 1 ? '' : 's'}`);
+
+    return parts.join(' ');
+}
+
+module.exports = { remaining, start, check, seconds, formatTime };

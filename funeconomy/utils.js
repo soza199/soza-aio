@@ -91,7 +91,14 @@ function onCooldown(message, game) {
     const hit = cooldown.check(game, message.author.id);
     if (!hit) return false;
     if (hit.notify) {
-        send(message, `${cfg.EMOJI.TIMER} | **${displayName(message)}**, slow down and try the command again in **${cooldown.seconds(hit.ms)}**!`)
+        const expiresAt = Date.now() + hit.ms;
+        send(message, `${cfg.EMOJI.TIMER} | **${displayName(message)}**, slow down and try the command again in **${cooldown.formatTime(hit.ms)}**!`)
+            .then((warningMessage) => {
+                const timer = setTimeout(() => {
+                    warningMessage.delete().catch(() => {});
+                }, Math.max(0, expiresAt - Date.now()));
+                timer.unref?.();
+            })
             .catch(() => {});
     }
     return true;
