@@ -1,142 +1,87 @@
-const {
-    ActionRowBuilder,
-    AttachmentBuilder,
-    EmbedBuilder,
-    PermissionsBitField,
-    SlashCommandBuilder,
-    StringSelectMenuBuilder
-} = require('discord.js');
-const Level = require('../../models/funeconomy/level');
+const { SlashCommandBuilder } = require('discord.js');
 const LevelCardPreference = require('../../models/funeconomy/levelCardPreference');
-const { CATEGORIES } = require('../../models/funeconomy/ranking');
-const { CARD_BACKGROUNDS, DEFAULT_BACKGROUND_ID, getCardBackground } = require('../../funeconomy/cardBackgrounds');
-const { generateLevelCard } = require('../../funeconomy/levelCard');
-const { progress } = require('../../funeconomy/leveling');
+const {
+    MAX_UPLOAD_BYTES,
+    SUPPORTED_MIME_TYPES,
+    normalizeCardBackground
+} = require('../../funeconomy/cardBackgroundUpload');
 
-const COLLECTOR_MS = 120_000;
+const MIME_BY_EXTENSION = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp'
+};
 
-async function buildPreviewData(interaction) {
-    const userId = interaction.user.id;
-    const profile = await Level.getProfile(userId);
-    const { level, into, needed } = progress(profile?.xp ?? 0);
-    const ranking = await CATEGORIES.level.rankOf(userId, { scope: 'global' }).catch(() => null);
-
-    return {
-        name: interaction.member?.displayName || interaction.user.globalName || interaction.user.username,
-        guildName: interaction.guild.name,
-        avatarURL: interaction.user.displayAvatarURL({ extension: 'png', size: 256 }),
-        level,
-        rank: ranking?.rank ?? null,
-        xp: into,
-        needed
-    };
+function getAttachmentMimeType(attachment) {
+    const declaredType = attachment.contentType?.split(';')[0].trim().toLowerCase();
+    if (declaredType) return declaredType;
+    const extension = attachment.name?.split('.').pop()?.toLowerCase();
+    return MIME_BY_EXTENSION[extension] || '';
 }
 
-async function showGallery(interaction) {
-    const botMember = interaction.guild.members.me
-        || await interaction.guild.members.fetchMe().catch(() => null);
-    const permissions = botMember && interaction.channel?.permissionsFor?.(botMember);
-    if (!permissions?.has(PermissionsBitField.Flags.AttachFiles)) {
+async function readAttachment(response) {
+    const chunks = [];
+    let totalBytes = 0;
+
+    for await (const chunk of response.body) {
+        const bytes = Buffer.from(chunk);
+        totalBytes += bytes.length;
+        if (totalBytes > MAX_UPLOAD_BYTES) {
+            throw new Error(`Ukuran gambar maksimal ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.`);
+        }
+        chunks.push(bytes);
+    }
+
+    return Buffer.concat(chunks, totalBytes);
+}
+
+async function uploadBackground(interaction) {
+    const attachment = interaction.options.getAttachment('image');
+    if (!attachment) {
         return interaction.reply({
-            content: 'Bot memerlukan izin **Attach Files** untuk menampilkan galeri kartu.',
+            content: 'Pilih gambar dari galeri perangkat melalui kolom lampiran `image`.',
+            ephemeral: true
+        });
+    }
+
+    if (attachment.size > MAX_UPLOAD_BYTES) {
+        return interaction.reply({
+            content: `Ukuran gambar maksimal ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.`,
+            ephemeral: true
+        });
+    }
+
+    const mimeType = getAttachmentMimeType(attachment);
+    if (!SUPPORTED_MIME_TYPES.includes(mimeType)) {
+        return interaction.reply({
+            content: 'Gunakan gambar PNG, JPG, atau WebP.',
             ephemeral: true
         });
     }
 
     await interaction.deferReply({ ephemeral: true });
+
     try {
-        const [previewData, currentBackgroundId] = await Promise.all([
-            buildPreviewData(interaction),
-            LevelCardPreference.getBackgroundId(interaction.user.id)
-        ]);
-        const previews = await Promise.all(CARD_BACKGROUNDS.map(async (background) => {
-            const buffer = await generateLevelCard({ ...previewData, backgroundId: background.id });
-            const fileName = `level-card-${background.id}.png`;
-            return { background, buffer, fileName };
-        }));
+        const response = await fetch(attachment.url);
+        if (!response.ok || !response.body) {
+            throw new Error('Lampiran Discord tidak dapat diunduh.');
+        }
 
-        const embeds = previews.map(({ background, fileName }) => new EmbedBuilder()
-            .setColor(0x5b1a7a)
-            .setTitle(background.label)
-            .setImage(`attachment://${fileName}`));
-        const files = previews.map(({ buffer, fileName }) => new AttachmentBuilder(buffer, { name: fileName }));
-        const menu = new StringSelectMenuBuilder()
-            .setCustomId(`levelcard-gallery:${interaction.user.id}`)
-            .setPlaceholder('Pilih gambar latar untuk kartu Anda')
-            .addOptions(CARD_BACKGROUNDS.map((background) => ({
-                label: background.label,
-                value: background.id,
-                default: background.id === currentBackgroundId
-            })));
-        const row = new ActionRowBuilder().addComponents(menu);
+        const uploadedImage = await readAttachment(response);
+        const normalizedImage = await normalizeCardBackground(uploadedImage, mimeType);
+        await LevelCardPreference.setBackgroundBuffer(interaction.user.id, normalizedImage);
 
-        const reply = await interaction.editReply({
-            content: 'Pilih salah satu gambar di atas untuk kartu level `slevel` Anda.',
-            embeds,
-            files,
-            components: [row],
-            allowedMentions: { parse: [] }
-        });
-        const collector = reply.createMessageComponentCollector({
-            time: COLLECTOR_MS,
-            filter: (component) =>
-                component.customId === `levelcard-gallery:${interaction.user.id}`
-                && component.user.id === interaction.user.id
-        });
-
-        collector.on('collect', async (component) => {
-            const background = getCardBackground(component.values[0]);
-            if (!background) {
-                await component.reply({ content: 'Pilihan gambar tidak tersedia.', ephemeral: true });
-                return;
-            }
-
-            try {
-                await LevelCardPreference.setBackgroundId(interaction.user.id, background.id);
-                const preview = previews.find((item) => item.background.id === background.id);
-                const selectedEmbed = new EmbedBuilder()
-                    .setColor(0x5b1a7a)
-                    .setTitle(`Gambar kartu diubah: ${background.label}`)
-                    .setImage('attachment://level-card-preview.png');
-                await component.update({
-                    content: '✅ Gambar latar kartu Anda sudah disimpan.',
-                    embeds: [selectedEmbed],
-                    files: [new AttachmentBuilder(preview.buffer, { name: 'level-card-preview.png' })],
-                    attachments: [],
-                    components: [],
-                    allowedMentions: { parse: [] }
-                });
-                collector.stop('saved');
-            } catch (error) {
-                console.error('[LEVEL CARD] Could not save background:', error);
-                await component.update({
-                    content: '❌ Gambar kartu gagal disimpan. Coba lagi nanti dengan `/levelcard gallery`.',
-                    embeds: [],
-                    attachments: [],
-                    components: [],
-                    allowedMentions: { parse: [] }
-                }).catch(() => {});
-                collector.stop('error');
-            }
-        });
-
-        collector.on('end', (collected, reason) => {
-            if (reason !== 'time' || collected.size > 0) return;
-            reply.edit({
-                content: 'Galeri kedaluwarsa. Jalankan `/levelcard gallery` untuk memilih gambar lagi.',
-                embeds: [],
-                attachments: [],
-                components: []
-            }).catch(() => {});
-        });
+        return interaction.editReply(
+            '✅ Gambar dari galeri Anda sudah disimpan. Jalankan `slevel` untuk melihat kartu level.'
+        );
     } catch (error) {
-        console.error('[LEVEL CARD] Could not show background gallery:', error);
-        await interaction.editReply({
-            content: '❌ Galeri kartu tidak dapat dimuat. Coba lagi nanti.',
-            embeds: [],
-            components: [],
-            allowedMentions: { parse: [] }
-        }).catch(() => {});
+        if (error.code === 'INVALID_CARD_BACKGROUND') {
+            return interaction.editReply(`❌ ${error.message}`);
+        }
+
+        console.error('[LEVEL CARD] Could not save uploaded background:', error);
+        return interaction.editReply('❌ Gambar gagal disimpan. Coba unggah PNG, JPG, atau WebP lain.');
     }
 }
 
@@ -144,11 +89,16 @@ module.exports = {
     category: 'fun',
     data: new SlashCommandBuilder()
         .setName('levelcard')
-        .setDescription('Pilih gambar latar kartu level PNG Anda')
+        .setDescription('Atur gambar latar kartu level Anda')
         .addSubcommand((subcommand) =>
             subcommand
-                .setName('gallery')
-                .setDescription('Lihat dan pilih gambar dari galeri kartu'))
+                .setName('upload')
+                .setDescription('Pilih dan unggah gambar dari galeri perangkat')
+                .addAttachmentOption((option) =>
+                    option
+                        .setName('image')
+                        .setDescription('Gambar PNG, JPG, atau WebP dari galeri Anda')
+                        .setRequired(true)))
         .addSubcommand((subcommand) =>
             subcommand
                 .setName('reset')
@@ -156,7 +106,7 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction?.options?.getSubcommand) {
-            return interaction?.reply?.('Gunakan slash command `/levelcard gallery` atau `/levelcard reset`.');
+            return interaction?.reply?.('Gunakan `/levelcard upload` atau `/levelcard reset`.');
         }
         if (!interaction.guild) {
             return interaction.reply({
@@ -165,16 +115,15 @@ module.exports = {
             });
         }
 
-        const subcommand = interaction.options.getSubcommand();
-        if (subcommand === 'reset') {
+        if (interaction.options.getSubcommand() === 'reset') {
             await LevelCardPreference.resetBackground(interaction.user.id);
             return interaction.reply({
-                content: `✅ Gambar latar dikembalikan ke bawaan (${DEFAULT_BACKGROUND_ID}).`,
+                content: '✅ Gambar latar kartu dikembalikan ke bawaan.',
                 ephemeral: true,
                 allowedMentions: { parse: [] }
             });
         }
 
-        return showGallery(interaction);
+        return uploadBackground(interaction);
     }
 };

@@ -117,10 +117,6 @@ module.exports = {
                 .addChannelOption(option =>
                     option.setName('alerts_channel')
                         .setDescription('Channel for urgent alerts')
-                        .setRequired(false))
-                .addBooleanOption(option =>
-                    option.setName('ai_analysis')
-                        .setDescription('Enable AI analysis')
                         .setRequired(false))),
 
     async execute(interaction) {
@@ -450,7 +446,6 @@ module.exports = {
         
         const reportsChannel = interaction.options.getChannel('reports_channel');
         const alertsChannel = interaction.options.getChannel('alerts_channel');
-        const aiAnalysis = interaction.options.getBoolean('ai_analysis');
         
         let settings = await ReportSettings.findOne({ guildId: interaction.guild.id });
         
@@ -468,11 +463,6 @@ module.exports = {
         if (alertsChannel) {
             settings.channels.alertsChannel = alertsChannel.id;
             changes.push(`Alerts channel: ${alertsChannel}`);
-        }
-        
-        if (aiAnalysis !== null) {
-            settings.autoModeration.aiAnalysis = aiAnalysis;
-            changes.push(`AI Analysis: ${aiAnalysis ? 'Enabled' : 'Disabled'}`);
         }
         
         await settings.save();

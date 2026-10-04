@@ -1,27 +1,29 @@
 const mongoose = require('mongoose');
-const { DEFAULT_BACKGROUND_ID, CARD_BACKGROUNDS } = require('../../funeconomy/cardBackgrounds');
 
 const levelCardPreferenceSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
-    backgroundId: {
-        type: String,
-        enum: [DEFAULT_BACKGROUND_ID, ...CARD_BACKGROUNDS.map((background) => background.id)],
-        default: DEFAULT_BACKGROUND_ID
-    }
+    backgroundBuffer: { type: Buffer, select: false }
 }, { timestamps: true });
 
-levelCardPreferenceSchema.statics.getBackgroundId = async function getBackgroundId(userId) {
-    const preference = await this.findOne({ userId }).select('backgroundId').lean();
-    return preference?.backgroundId || DEFAULT_BACKGROUND_ID;
+levelCardPreferenceSchema.statics.getBackgroundBuffer = async function getBackgroundBuffer(userId) {
+    const preference = await this.findOne({ userId })
+        .select('+backgroundBuffer')
+        .lean();
+    const backgroundBuffer = preference?.backgroundBuffer;
+    return Buffer.isBuffer(backgroundBuffer)
+        ? backgroundBuffer
+        : backgroundBuffer
+            ? Buffer.from(backgroundBuffer)
+            : null;
 };
 
-levelCardPreferenceSchema.statics.setBackgroundId = async function setBackgroundId(userId, backgroundId) {
-    if (![DEFAULT_BACKGROUND_ID, ...CARD_BACKGROUNDS.map((background) => background.id)].includes(backgroundId)) {
-        throw new Error('Unknown level card background.');
+levelCardPreferenceSchema.statics.setBackgroundBuffer = async function setBackgroundBuffer(userId, backgroundBuffer) {
+    if (!Buffer.isBuffer(backgroundBuffer) || backgroundBuffer.length === 0 || backgroundBuffer.length > 2 * 1024 * 1024) {
+        throw new Error('Invalid level card background image.');
     }
     return this.updateOne(
         { userId },
-        { $set: { backgroundId } },
+        { $set: { backgroundBuffer } },
         { upsert: true, setDefaultsOnInsert: true }
     );
 };

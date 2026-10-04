@@ -38,7 +38,7 @@ Chat memberi XP untuk akun terdaftar; kenaikan level memberi cash.
 | `slevel [@user]` | lvl, xp | Kartu level ala OwO: avatar, nama, server, LVL, Rank global, XP, dan progress bar |
 | `slevelup [on\|off]` | lvlup | Atur pesan level up di server (izin Manage Server diperlukan) |
 
-- `/levelcard gallery` menampilkan pratinjau gambar latar dan menyimpan pilihan per pengguna untuk kartu level `slevel`.
+- `/levelcard upload` menyimpan gambar yang Anda pilih dari galeri perangkat melalui lampiran Discord untuk kartu level `slevel`.
 - `/levelcard reset` mengembalikan gambar kartu ke bawaan.
 - Chat memberi 10–15 XP per menit, maksimal 3.000 XP chat per hari.
 - Bonus 500 XP untuk pesan pertama harian dan 100 XP saat `sdaily` berhasil, di luar batas chat.

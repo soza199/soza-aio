@@ -20,10 +20,6 @@ module.exports = {
                 .addChannelOption(option =>
                     option.setName('alert-channel')
                         .setDescription('Channel for critical alerts')
-                        .setRequired(false))
-                .addBooleanOption(option =>
-                    option.setName('ai-enabled')
-                        .setDescription('Enable AI-powered detection')
                         .setRequired(false)))
         
         // General Settings
@@ -33,19 +29,6 @@ module.exports = {
                 .addBooleanOption(option =>
                     option.setName('enabled')
                         .setDescription('Enable/disable entire anti-system'))
-                .addStringOption(option =>
-                    option.setName('ai-sensitivity')
-                        .setDescription('AI detection sensitivity')
-                        .addChoices(
-                            { name: 'Low - Less sensitive', value: 'low' },
-                            { name: 'Medium - Balanced', value: 'medium' },
-                            { name: 'High - More sensitive', value: 'high' }
-                        ))
-                .addNumberOption(option =>
-                    option.setName('ai-threshold')
-                        .setDescription('AI confidence threshold (0.1-1.0)')
-                        .setMinValue(0.1)
-                        .setMaxValue(1.0))
                 .addBooleanOption(option =>
                     option.setName('use-quarantine')
                         .setDescription('Use quarantine system for punishments')))
@@ -358,7 +341,6 @@ module.exports = {
             if (subcommand === 'init') {
                 const logChannel = interaction.options.getChannel('log-channel');
                 const alertChannel = interaction.options.getChannel('alert-channel');
-                const aiEnabled = interaction.options.getBoolean('ai-enabled') ?? true;
                 
                 // Validate channels
                 if (!logChannel.isTextBased()) {
@@ -370,7 +352,6 @@ module.exports = {
                 
                 config.logChannelId = logChannel.id;
                 config.alertChannelId = alertChannel?.id || logChannel.id;
-                config.aiEnabled = aiEnabled;
                 config.whitelist.owners = [owner.id];
                 config.enabled = true;
                 
@@ -384,7 +365,6 @@ module.exports = {
                     .addFields(
                         { name: 'Log Channel', value: `<#${logChannel.id}>`, inline: true },
                         { name: 'Alert Channel', value: `<#${alertChannel?.id || logChannel.id}>`, inline: true },
-                        { name: 'AI Detection', value: aiEnabled ? '✅ Enabled' : '❌ Disabled', inline: true },
                         { name: 'Quarantine Integration', value: quarantineConfig ? '✅ Available' : '⚠️ Setup quarantine system for full protection', inline: false },
                         { name: 'Active Modules', value: '🛡️ Anti-Spam\n🔗 Anti-Link\n💣 Anti-Nuke\n🚫 Anti-Raid', inline: true },
                         { name: 'Protection Level', value: '🔥 **MAXIMUM**', inline: true }
@@ -398,13 +378,9 @@ module.exports = {
             // ========== GENERAL SETTINGS ==========
             if (subcommand === 'general') {
                 const enabled = interaction.options.getBoolean('enabled');
-                const aiSensitivity = interaction.options.getString('ai-sensitivity');
-                const aiThreshold = interaction.options.getNumber('ai-threshold');
                 const useQuarantine = interaction.options.getBoolean('use-quarantine');
                 
                 if (enabled !== null) config.enabled = enabled;
-                if (aiSensitivity) config.aiSensitivity = aiSensitivity;
-                if (aiThreshold) config.aiConfidenceThreshold = aiThreshold;
                 if (useQuarantine !== null) config.punishmentSystem.useQuarantine = useQuarantine;
                 
                 await config.save();
@@ -414,8 +390,6 @@ module.exports = {
                     .setColor('#00ff00')
                     .addFields(
                         { name: 'System Status', value: config.enabled ? '✅ Enabled' : '❌ Disabled', inline: true },
-                        { name: 'AI Sensitivity', value: config.aiSensitivity.toUpperCase(), inline: true },
-                        { name: 'AI Threshold', value: config.aiConfidenceThreshold.toString(), inline: true },
                         { name: 'Use Quarantine', value: config.punishmentSystem.useQuarantine ? '✅ Yes' : '❌ No', inline: true }
                     );
                 
@@ -810,7 +784,6 @@ module.exports = {
                         { name: '🔗 Anti-Link', value: config.antiLink.enabled ? '✅ Active' : '❌ Disabled', inline: true },
                         { name: '💣 Anti-Nuke', value: config.antiNuke.enabled ? '✅ Active' : '❌ Disabled', inline: true },
                         { name: '🚫 Anti-Raid', value: config.antiRaid.enabled ? '✅ Active' : '❌ Disabled', inline: true },
-                        { name: '🤖 AI Detection', value: config.aiEnabled ? `✅ ${config.aiSensitivity.toUpperCase()}` : '❌ Disabled', inline: true },
                         { name: '🏺 Quarantine', value: quarantineConfig?.quarantineEnabled ? '✅ Integrated' : '⚠️ Not Setup', inline: true },
                         { name: '📊 Log Channel', value: `<#${config.logChannelId}>`, inline: true },
                         { name: '🚨 Alert Channel', value: `<#${config.alertChannelId}>`, inline: true },

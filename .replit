@@ -10,3 +10,26 @@ expertMode = true
 
 [userenv.shared]
 DISCORD_USER_ID = "1015128735416061952"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start Discord bot"
+
+[[workflows.workflow]]
+name = "Start Discord bot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm start"
+
+[workflows.workflow.metadata]
+outputType = "console"

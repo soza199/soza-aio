@@ -41,12 +41,12 @@ module.exports = {
         if (canAttach) {
             try {
                 const { generateLevelCard } = require('../levelCard');
-                const backgroundId = await LevelCardPreference.getBackgroundId(target.id);
+                const backgroundBuffer = await LevelCardPreference.getBackgroundBuffer(target.id);
                 const buffer = await generateLevelCard({
                     name: rawName,
                     guildName: message.guild.name,
                     avatarURL: target.displayAvatarURL?.({ extension: 'png', size: 256 }) ?? null,
-                    level, rank, xp: into, needed, backgroundId
+                    level, rank, xp: into, needed, backgroundBuffer
                 });
                 return message.channel.send({
                     files: [new AttachmentBuilder(buffer, { name: 'level.png' })],
