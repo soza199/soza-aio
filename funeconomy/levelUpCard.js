@@ -28,7 +28,17 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 /** Latar synthwave: langit ungu, matahari bergaris, gunung neon. */
-function drawBackground(ctx) {
+function drawBackground(ctx, image = null) {
+    if (image) {
+        const scale = Math.max(W / image.width, H / image.height);
+        const width = image.width * scale;
+        const height = image.height * scale;
+        ctx.drawImage(image, (W - width) / 2, (H - height) / 2, width, height);
+        ctx.fillStyle = 'rgba(8,4,28,0.42)';
+        ctx.fillRect(0, 0, W, H);
+        return;
+    }
+
     const sky = ctx.createLinearGradient(0, 0, 0, H);
     sky.addColorStop(0, '#1a0536');
     sky.addColorStop(0.55, '#5b1a7a');

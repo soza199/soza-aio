@@ -1,8 +1,9 @@
-const { createCanvas } = require('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { shared } = require('./levelUpCard');
 const { fmt } = require('./utils');
+const { getCardBackground } = require('./cardBackgrounds');
 
-const { W, H, SCALE, FONT, ensureFont, font, roundRect, drawBackground, drawAvatar } = shared;
+const { W, H, SCALE, ensureFont, font, roundRect, drawBackground, drawAvatar } = shared;
 
 /** Perkecil font (bold) sampai teks muat dalam maxWidth. */
 function fit(ctx, text, startSize, maxWidth, weight = 'bold', minSize = 20) {
@@ -21,16 +22,26 @@ function fit(ctx, text, startSize, maxWidth, weight = 'bold', minSize = 20) {
  *           rank?: number|null, xp: number, needed: number }} opts
  *   xp = XP di level ini, needed = XP untuk naik ke level berikutnya.
  */
-async function generateLevelCard({ name, guildName = '', avatarURL, level, rank, xp, needed }) {
+async function generateLevelCard({ name, guildName = '', avatarURL, level, rank, xp, needed, backgroundId }) {
     ensureFont();
     const canvas = createCanvas(W * SCALE, H * SCALE);
     const ctx = canvas.getContext('2d');
     ctx.scale(SCALE, SCALE);
 
+    let backgroundImage = null;
+    const selectedBackground = getCardBackground(backgroundId);
+    if (selectedBackground) {
+        try {
+            backgroundImage = await loadImage(selectedBackground.path);
+        } catch (error) {
+            console.error('[FUNECONOMY] Level card background failed:', error.message);
+        }
+    }
+
     ctx.save();
     roundRect(ctx, 0, 0, W, H, 28);
     ctx.clip();
-    drawBackground(ctx);
+    drawBackground(ctx, backgroundImage);
 
     const avatarRight = await drawAvatar(ctx, avatarURL, name);
     const textX = avatarRight + 36;

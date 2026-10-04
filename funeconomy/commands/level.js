@@ -1,6 +1,7 @@
 const { AttachmentBuilder, PermissionsBitField } = require('discord.js');
 const cfg = require('../config');
 const Level = require('../../models/funeconomy/level');
+const LevelCardPreference = require('../../models/funeconomy/levelCardPreference');
 const { CATEGORIES } = require('../../models/funeconomy/ranking');
 const { progress } = require('../leveling');
 const { fmt, displayName, send, errorLine } = require('../utils');
@@ -40,11 +41,12 @@ module.exports = {
         if (canAttach) {
             try {
                 const { generateLevelCard } = require('../levelCard');
+                const backgroundId = await LevelCardPreference.getBackgroundId(target.id);
                 const buffer = await generateLevelCard({
                     name: rawName,
                     guildName: message.guild.name,
                     avatarURL: target.displayAvatarURL?.({ extension: 'png', size: 256 }) ?? null,
-                    level, rank, xp: into, needed
+                    level, rank, xp: into, needed, backgroundId
                 });
                 return message.channel.send({
                     files: [new AttachmentBuilder(buffer, { name: 'level.png' })],

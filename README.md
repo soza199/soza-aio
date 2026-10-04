@@ -78,9 +78,6 @@ MUSIC_DEFAULT_VOLUME=90
   <li>Set <code>DISCORD_GUILD_ID</code> to your server ID so slash commands appear immediately while deploying. Without it, Discord registers them globally and propagation can take up to an hour.</li>
 </ol>
 
-<h4>AI chat setup</h4>
-<p>The bot uses one global <code>GEMINI_API_KEY</code> from the hosting provider's secret manager. Server administrators do not need to add keys through Discord. After the bot starts, run <code>/setup-aichat set</code> and choose the channel where AI chat should respond.</p>
-
 <h4>Step 3: Add Build and Start Commands</h4>
 <pre>
 Run the following commands to install dependencies and start your bot:
