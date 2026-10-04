@@ -23,9 +23,7 @@ module.exports = {
 
         const profile = await Level.getProfile(target.id);
         const member = message.guild.members.cache.get(target.id);
-        const rawName = target.id === message.author.id
-            ? (message.member?.displayName ?? message.author.username)
-            : (member?.displayName ?? target.username);
+        const rawName = target.username;
         if (!profile) {
             return send(message, errorLine(name, `**${displayName({ member, author: target })}** hasn't registered yet! They need to use any economy command first.`));
         }
