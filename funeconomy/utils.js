@@ -54,6 +54,24 @@ function formatDuration(ms) {
 const send = (message, content) =>
     message.channel.send({ content, allowedMentions: { parse: [] } });
 
+/** Kirim error saldo yang hanya perlu terlihat sebentar. */
+const sendTemporaryError = (message, content, delayMs = 3000) =>
+    send(message, content).then((sent) => {
+        const timer = setTimeout(() => sent.delete().catch(() => {}), delayMs);
+        timer.unref?.();
+        return sent;
+    });
+
+function deleteInteractionReplyAfter(interaction, delayMs = 3000) {
+    const timer = setTimeout(() => {
+        Promise.resolve()
+            .then(() => interaction.deleteReply())
+            .catch(() => {});
+    }, delayMs);
+    timer.unref?.();
+    return timer;
+}
+
 const errorLine = (name, text) => `${cfg.EMOJI.ERROR} | **${name}**, ${text}`;
 
 /**
@@ -65,11 +83,13 @@ function resolveBet(token, balance, max = cfg.MAX_BET) {
     const bet = token === undefined ? cfg.MIN_BET : parseAmount(token, balance, max);
     if (bet === null || !Number.isSafeInteger(bet)) return { error: 'that is not a valid amount!' };
     if (bet < cfg.MIN_BET) {
-        if (String(token).toLowerCase() === 'all') return { error: `you don't have any ${cfg.CASH_NAME} to bet!` };
+        if (String(token).toLowerCase() === 'all') {
+            return { error: `you don't have any ${cfg.CASH_NAME} to bet!`, insufficientBalance: true };
+        }
         return { error: `you need to bet at least **${fmt(cfg.MIN_BET)}**!` };
     }
     if (bet > max) return { error: `the maximum amount you can bet is **${fmt(max)}**!` };
-    if (balance < bet) return { error: `you don't have enough ${cfg.CASH_NAME}!` };
+    if (balance < bet) return { error: `you don't have enough ${cfg.CASH_NAME}!`, insufficientBalance: true };
     return { bet };
 }
 
@@ -115,5 +135,6 @@ const releaseGambleLock = (userId) => gambleLocks.delete(userId);
 
 module.exports = {
     fmt, displayName, sleep, animateSlotReels, isAmountToken, parseAmount, formatDuration,
-    send, sendEmbed, canEmbed, resolveBet, errorLine, onCooldown, acquireGambleLock, releaseGambleLock
+    send, sendTemporaryError, deleteInteractionReplyAfter,
+    sendEmbed, canEmbed, resolveBet, errorLine, onCooldown, acquireGambleLock, releaseGambleLock
 };

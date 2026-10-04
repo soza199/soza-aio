@@ -33,7 +33,7 @@ const {
 const cmdIcons = require('../../UI/icons/commandicons');
 const funCooldown = require('../../funeconomy/cooldown');
 const { registerGate } = require('../../funeconomy/register');
-const { sleep, animateSlotReels } = require('../../funeconomy/utils');
+const { sleep, animateSlotReels, deleteInteractionReplyAfter } = require('../../funeconomy/utils');
 const { Economy, EconomyManager } = require('../../models/economy/economy');
 const FunEconomy = require('../../models/funeconomy/economy');
 const funEconomyConfig = require('../../funeconomy/config');
@@ -60,11 +60,13 @@ async function takeGameBet(interaction, amount, description, extraSet = {}) {
     await FunEconomy.ensureAccount(interaction.user.id);
     const balance = await FunEconomy.getCash(interaction.user.id);
     if (balance < amount) {
-        return { error: `You have ${formatCoins(balance)}, which is not enough for that bet.` };
+        return { error: `You have ${formatCoins(balance)}, which is not enough for that bet.`, insufficientBalance: true };
     }
 
     const updated = await FunEconomy.deduct(interaction.user.id, amount);
-    if (!updated) return { error: 'Your balance changed before the bet could be placed. Please try again.' };
+    if (!updated) {
+        return { error: 'Your balance changed before the bet could be placed. Please try again.', insufficientBalance: true };
+    }
     return { profile: updated };
 }
 
@@ -500,11 +502,13 @@ module.exports = {
 
         await interaction.deferReply();
 
-        const sendReply = async (components, extraComponents = []) => {
-            return await interaction.editReply({
+        const sendReply = async (components, extraComponents = [], deleteAfterMs = 0) => {
+            const reply = await interaction.editReply({
                 components: [components, ...extraComponents],
                 flags: MessageFlags.IsComponentsV2
             });
+            if (deleteAfterMs > 0) deleteInteractionReplyAfter(interaction, deleteAfterMs);
+            return reply;
         };
 
         try {
@@ -1101,7 +1105,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         await FunEconomy.ensureAccount(interaction.user.id);
         const balance = await FunEconomy.getCash(interaction.user.id);
         if (balance < bet) {
-            return sendReply(economyPanel('🎰 Slots unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c));
+            return sendReply(economyPanel('🎰 Slots unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c), [], 3000);
         }
 
         const slotsWait = funCooldown.remaining('slots', interaction.user.id);
@@ -1114,7 +1118,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         const payout = Math.floor(bet * multiplier);
         const settled = await FunEconomy.settleBet(interaction.user.id, bet, payout);
         if (!settled) {
-            return sendReply(economyPanel('🎰 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c));
+            return sendReply(economyPanel('🎰 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c), [], 3000);
         }
         funCooldown.start('slots', interaction.user.id);
 
@@ -1144,7 +1148,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         const bet = interaction.options.getInteger('bet') || 100;
         const wager = await takeGameBet(interaction, bet, 'Lottery ticket');
         if (wager.error) {
-            return sendReply(economyPanel('🎫 Lottery unavailable', wager.error, 0xe74c3c));
+            return sendReply(economyPanel('🎫 Lottery unavailable', wager.error, 0xe74c3c), [], wager.insufficientBalance ? 3000 : 0);
         }
 
         const draw = () => {
@@ -1186,7 +1190,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         await FunEconomy.ensureAccount(interaction.user.id);
         const balance = await FunEconomy.getCash(interaction.user.id);
         if (balance < bet) {
-            return sendReply(economyPanel('🪙 Coinflip unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c));
+            return sendReply(economyPanel('🪙 Coinflip unavailable', `You have ${formatCoins(balance)}, which is not enough for that bet.`, 0xe74c3c), [], 3000);
         }
 
         const cfWait = funCooldown.remaining('cf', interaction.user.id);
@@ -1199,7 +1203,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
         const payout = won ? bet * 2 : 0;
         const settled = await FunEconomy.settleBet(interaction.user.id, bet, payout);
         if (!settled) {
-            return sendReply(economyPanel('🪙 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c));
+            return sendReply(economyPanel('🪙 Bet not placed', 'Your cash changed before the bet could be placed. Please try again.', 0xe74c3c), [], 3000);
         }
         funCooldown.start('cf', interaction.user.id);
         const name = escapeMarkdown(interaction.user.username);
@@ -1268,7 +1272,7 @@ iq >= 120 ? '• Analytical puzzles and brain games\n• Learning new languages\
             blackjackSession: session
         });
         if (wager.error) {
-            return sendReply(economyPanel('🃏 Blackjack unavailable', wager.error, 0xe74c3c));
+            return sendReply(economyPanel('🃏 Blackjack unavailable', wager.error, 0xe74c3c), [], wager.insufficientBalance ? 3000 : 0);
         }
 
         if (isBlackjack(session.playerCards) || isBlackjack(session.dealerCards)) {

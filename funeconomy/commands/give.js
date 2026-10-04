@@ -1,7 +1,7 @@
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
 const Registration = require('../../models/funeconomy/registration');
-const { fmt, displayName, send, errorLine, isAmountToken, parseAmount } = require('../utils');
+const { fmt, displayName, send, sendTemporaryError, errorLine, isAmountToken, parseAmount } = require('../utils');
 const { escapeMarkdown } = require('discord.js');
 
 module.exports = {
@@ -39,12 +39,12 @@ module.exports = {
         const balance = await Economy.getCash(senderId);
         const amount = parseAmount(amountToken, balance);
         if (!Number.isSafeInteger(amount) || amount < 1) {
-            return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+            return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
         }
 
         // Kurangi atomik dulu; kalau gagal menambah ke penerima, kembalikan ke pengirim
         const debited = await Economy.deduct(senderId, amount);
-        if (!debited) return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+        if (!debited) return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
 
         try {
             await Economy.add(target.id, amount);

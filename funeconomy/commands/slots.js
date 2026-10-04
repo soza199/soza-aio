@@ -3,7 +3,7 @@ const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
 const cooldown = require('../cooldown');
 const {
-    fmt, displayName, sleep, animateSlotReels, isAmountToken, parseAmount, send, errorLine,
+    fmt, displayName, sleep, animateSlotReels, isAmountToken, parseAmount, send, sendTemporaryError, errorLine,
     acquireGambleLock, releaseGambleLock, onCooldown
 } = require('../utils');
 
@@ -88,14 +88,14 @@ module.exports = {
             const bet = args.length === 0 ? cfg.MIN_BET : parseAmount(args[0], balance, cfg.MAX_BET);
 
             if (bet < cfg.MIN_BET) {
-                if (args[0]?.toLowerCase() === 'all') return send(message, errorLine(name, `you don't have any ${cfg.CASH_NAME} to bet!`));
+                if (args[0]?.toLowerCase() === 'all') return sendTemporaryError(message, errorLine(name, `you don't have any ${cfg.CASH_NAME} to bet!`));
                 return send(message, errorLine(name, `you need to bet at least **${fmt(cfg.MIN_BET)}**!`));
             }
             if (bet > cfg.MAX_BET) {
                 return send(message, errorLine(name, `the maximum amount you can bet is **${fmt(cfg.MAX_BET)}**!`));
             }
             if (balance < bet) {
-                return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+                return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
             }
 
             if (onCooldown(message, 'slots')) return;
@@ -106,7 +106,7 @@ module.exports = {
 
             const settled = await Economy.settleBet(userId, bet, payout);
             if (!settled) {
-                return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+                return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
             }
 
             cooldown.start('slots', userId);

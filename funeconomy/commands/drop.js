@@ -1,7 +1,7 @@
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
 const Drop = require('../../models/funeconomy/drop');
-const { fmt, displayName, send, errorLine, isAmountToken, parseAmount, acquireGambleLock, releaseGambleLock } = require('../utils');
+const { fmt, displayName, send, sendTemporaryError, errorLine, isAmountToken, parseAmount, acquireGambleLock, releaseGambleLock } = require('../utils');
 
 module.exports = {
     name: 'drop',
@@ -19,12 +19,12 @@ module.exports = {
             const balance = await Economy.getCash(userId);
             const amount = parseAmount(args[0], balance);
             if (!Number.isSafeInteger(amount) || amount < 1) {
-                return send(message, errorLine(name, `you don't have any ${cfg.CASH_NAME} to drop!`));
+                return sendTemporaryError(message, errorLine(name, `you don't have any ${cfg.CASH_NAME} to drop!`));
             }
-            if (balance < amount) return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+            if (balance < amount) return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
 
             const debited = await Economy.deduct(userId, amount);
-            if (!debited) return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+            if (!debited) return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
 
             try {
                 await Drop.create({ channelId: message.channel.id, userId, amount });

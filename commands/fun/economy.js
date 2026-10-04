@@ -9,7 +9,7 @@ const {
 const Economy = require('../../models/funeconomy/economy');
 const Registration = require('../../models/funeconomy/registration');
 const cfg = require('../../funeconomy/config');
-const { formatDuration, sleep, animateSlotReels } = require('../../funeconomy/utils');
+const { formatDuration, sleep, animateSlotReels, deleteInteractionReplyAfter } = require('../../funeconomy/utils');
 const cooldown = require('../../funeconomy/cooldown');
 const { grantDailyXp } = require('../../funeconomy/levelUp');
 const { fmt } = require('../../funeconomy/utils');
@@ -36,6 +36,12 @@ function show(interaction, title, body, color) {
         components: [panel(title, body, color)],
         flags: MessageFlags.IsComponentsV2
     });
+}
+
+async function showTemporary(interaction, title, body, color) {
+    const reply = await show(interaction, title, body, color);
+    deleteInteractionReplyAfter(interaction);
+    return reply;
 }
 
 module.exports = {
@@ -150,7 +156,7 @@ module.exports = {
                 await Economy.ensureAccount(userId);
                 const balance = await Economy.getCash(userId);
                 if (balance < bet) {
-                    return show(
+                    return showTemporary(
                         interaction,
                         '❌ Not enough cash',
                         `Your balance is **${money(balance)}**, which is not enough for that bet.`,
@@ -175,7 +181,7 @@ module.exports = {
                     const payout = bet * multiplier;
                     const updated = await Economy.settleBet(userId, bet, payout);
                     if (!updated) {
-                        return show(interaction, '❌ Bet not placed', 'Your balance changed before the bet could be placed. Please try again.', 0xe74c3c);
+                        return showTemporary(interaction, '❌ Bet not placed', 'Your balance changed before the bet could be placed. Please try again.', 0xe74c3c);
                     }
                     cooldown.start('slots', userId);
 
@@ -207,7 +213,7 @@ module.exports = {
                 const payout = won ? bet * 2 : 0;
                 const updated = await Economy.settleBet(userId, bet, payout);
                 if (!updated) {
-                    return show(interaction, '❌ Bet not placed', 'Your balance changed before the bet could be placed. Please try again.', 0xe74c3c);
+                    return showTemporary(interaction, '❌ Bet not placed', 'Your balance changed before the bet could be placed. Please try again.', 0xe74c3c);
                 }
                 cooldown.start('cf', userId);
                 const name = escapeMarkdown(interaction.user.username);
@@ -248,7 +254,7 @@ module.exports = {
                 await Economy.ensureAccount(userId);
                 const debited = await Economy.deduct(userId, amount);
                 if (!debited) {
-                    return show(interaction, '❌ Cash not sent', `You do not have enough ${cfg.CASH_NAME}.`, 0xe74c3c);
+                    return showTemporary(interaction, '❌ Cash not sent', `You do not have enough ${cfg.CASH_NAME}.`, 0xe74c3c);
                 }
 
                 try {

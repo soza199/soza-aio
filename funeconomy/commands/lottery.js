@@ -4,7 +4,7 @@ const Economy = require('../../models/funeconomy/economy');
 const lottery = require('../lottery');
 const cooldown = require('../cooldown');
 const {
-    fmt, displayName, send, sendEmbed, canEmbed, parseAmount, isAmountToken, errorLine,
+    fmt, displayName, send, sendTemporaryError, sendEmbed, canEmbed, parseAmount, isAmountToken, errorLine,
     formatDuration, acquireGambleLock, releaseGambleLock, onCooldown
 } = require('../utils');
 
@@ -71,7 +71,7 @@ module.exports = {
             const balance = await Economy.getCash(userId);
             const bet = parseAmount(args[0], balance, remaining);
             if (!Number.isSafeInteger(bet) || bet < cfg.MIN_BET) {
-                if (args[0].toLowerCase() === 'all') return send(message, errorLine(name, `you don't have any ${cfg.CASH_NAME} to bet!`));
+                if (args[0].toLowerCase() === 'all') return sendTemporaryError(message, errorLine(name, `you don't have any ${cfg.CASH_NAME} to bet!`));
                 return send(message, errorLine(name, `you need to bet at least **${fmt(cfg.MIN_BET)}**!`));
             }
             if (bet > remaining) {
@@ -79,10 +79,10 @@ module.exports = {
                     ? `the maximum amount you can bet per lottery is **${fmt(MAX)}**!`
                     : `you can only bet up to **${fmt(MAX)}** per lottery! You can still bet **${fmt(remaining)}**.`));
             }
-            if (balance < bet) return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+            if (balance < bet) return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
 
             const debited = await Economy.deduct(userId, bet);
-            if (!debited) return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+            if (!debited) return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
 
             let entry;
             try {

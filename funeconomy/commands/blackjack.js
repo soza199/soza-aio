@@ -4,7 +4,7 @@ const Blackjack = require('../../models/funeconomy/blackjack');
 const bj = require('../blackjack');
 const cooldown = require('../cooldown');
 const {
-    displayName, send, sendEmbed, canEmbed, resolveBet, errorLine,
+    displayName, send, sendTemporaryError, sendEmbed, canEmbed, resolveBet, errorLine,
     acquireGambleLock, releaseGambleLock, onCooldown
 } = require('../utils');
 
@@ -51,8 +51,13 @@ module.exports = {
             }
 
             const balance = await Economy.getCash(userId);
-            const { bet, error } = resolveBet(args[0], balance);
-            if (error) return send(message, errorLine(name, error));
+            const { bet, error, insufficientBalance } = resolveBet(args[0], balance);
+            if (error) {
+                const reply = errorLine(name, error);
+                return insufficientBalance
+                    ? sendTemporaryError(message, reply)
+                    : send(message, reply);
+            }
 
             if (onCooldown(message, 'bj')) return;
 
@@ -75,7 +80,7 @@ module.exports = {
             const debited = await Economy.deduct(userId, bet);
             if (!debited) {
                 await Blackjack.deleteOne({ userId });
-                return send(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
+                return sendTemporaryError(message, errorLine(name, `you don't have enough ${cfg.CASH_NAME}!`));
             }
 
             cooldown.start('bj', userId);
