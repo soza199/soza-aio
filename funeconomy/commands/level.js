@@ -1,23 +1,15 @@
-const { EmbedBuilder, escapeMarkdown } = require('discord.js');
+const { AttachmentBuilder, PermissionsBitField } = require('discord.js');
 const cfg = require('../config');
 const Level = require('../../models/funeconomy/level');
-const { progress, rewardForLevels } = require('../leveling');
-const { fmt, displayName, send, sendEmbed, canEmbed, errorLine } = require('../utils');
-
-const BAR_SIZE = 10;
-const bar = (into, needed) => {
-    const filled = Math.max(0, Math.min(BAR_SIZE, Math.floor((into / needed) * BAR_SIZE)));
-    return '█'.repeat(filled) + '░'.repeat(BAR_SIZE - filled);
-};
+const { CATEGORIES } = require('../../models/funeconomy/ranking');
+const { progress } = require('../leveling');
+const { fmt, displayName, send, errorLine } = require('../utils');
 
 module.exports = {
     name: 'level',
     aliases: ['lvl', 'xp'],
     async execute(message, args, client) {
         const name = displayName(message);
-        if (!canEmbed(message)) {
-            return send(message, errorLine(name, 'I need the **Embed Links** permission in this channel to show your level!'));
-        }
 
         let target = message.mentions.users.first() || null;
         const idArg = args.find((arg) => /^\d{17,20}$/.test(arg));
@@ -29,43 +21,42 @@ module.exports = {
         if (target.bot) return send(message, errorLine(name, "bots don't have a level!"));
 
         const profile = await Level.getProfile(target.id);
-        const targetName = escapeMarkdown(
-            target.id === message.author.id ? name : (message.guild.members.cache.get(target.id)?.displayName ?? target.username)
-        );
+        const member = message.guild.members.cache.get(target.id);
+        const rawName = target.id === message.author.id
+            ? (message.member?.displayName ?? message.author.username)
+            : (member?.displayName ?? target.username);
         if (!profile) {
-            return send(message, errorLine(name, `**${targetName}** hasn't registered yet! They need to use any economy command first.`));
+            return send(message, errorLine(name, `**${displayName({ member, author: target })}** hasn't registered yet! They need to use any economy command first.`));
         }
 
-        const T = cfg.LEVELING;
         const { level, into, needed } = progress(profile.xp);
-        const percent = Math.floor((into / needed) * 100);
-        const nextReward = rewardForLevels(level, level + 1);
+        // Rank global berdasarkan XP, seperti rank di kartu level OwO.
+        const ranking = await CATEGORIES.level.rankOf(target.id, { scope: 'global' }).catch(() => null);
+        const rank = ranking?.rank ?? null;
 
-        const embed = new EmbedBuilder()
-            .setColor(0xf1c40f)
-            .setTitle(`${targetName}'s Level`)
-            .setDescription(
-                `${cfg.EMOJI.LEVEL} **Level ${fmt(level)}**\n` +
-                `\`${bar(into, needed)}\` ${fmt(into)} / ${fmt(needed)} XP (${percent}%)`
-            )
-            .addFields(
-                { name: 'Total XP', value: fmt(profile.xp), inline: true },
-                {
-                    name: 'Today',
-                    value: `${fmt(profile.chatXpToday)} / ${fmt(T.DAILY_CHAT_XP_CAP)} chat XP\n` +
-                        `${profile.bonusClaimedToday ? '✅' : '⬜'} first message bonus`,
-                    inline: true
-                },
-                {
-                    name: 'Next reward',
-                    value: `${cfg.CASH_EMOJI} ${fmt(nextReward)} at level ${fmt(level + 1)}`,
-                    inline: true
-                }
-            )
-            .setFooter({ text: `Chat to earn ${T.CHAT_XP_MIN}-${T.CHAT_XP_MAX} XP every minute, +${T.DAILY_COMMAND_XP} XP from ${cfg.PREFIX}daily` });
+        // Kartu gambar ala OwO; kalau bot tidak boleh upload file atau kartu gagal dibuat, kirim teks biasa.
+        const me = message.guild.members.me;
+        const canAttach = !!me && !!message.channel.permissionsFor?.(me)?.has(PermissionsBitField.Flags.AttachFiles);
+        if (canAttach) {
+            try {
+                const { generateLevelCard } = require('../levelCard');
+                const buffer = await generateLevelCard({
+                    name: rawName,
+                    guildName: message.guild.name,
+                    avatarURL: target.displayAvatarURL?.({ extension: 'png', size: 256 }) ?? null,
+                    level, rank, xp: into, needed
+                });
+                return message.channel.send({
+                    files: [new AttachmentBuilder(buffer, { name: 'level.png' })],
+                    allowedMentions: { parse: [] }
+                });
+            } catch (error) {
+                console.error('[FUNECONOMY] Level card failed:', error.message);
+            }
+        }
 
-        const avatar = target.displayAvatarURL?.({ extension: 'png', size: 128 });
-        if (avatar) embed.setThumbnail(avatar);
-        return sendEmbed(message, embed);
+        const targetName = displayName({ member: member ?? message.member, author: target });
+        return send(message,
+            `${cfg.EMOJI.LEVEL} | **${targetName}** | LVL **${fmt(level)}** | Rank: **${rank ? `#${fmt(rank)}` : '-'}** | XP: **${fmt(into)}/${fmt(needed)}**`);
     }
 };

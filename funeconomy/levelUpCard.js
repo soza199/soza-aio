@@ -209,4 +209,8 @@ async function generateLevelUpCard({ name, avatarURL, level, reward }) {
     return canvas.toBuffer('image/png');
 }
 
-module.exports = { generateLevelUpCard };
+module.exports = {
+    generateLevelUpCard,
+    // dipakai bersama oleh kartu level (levelCard.js)
+    shared: { W, H, SCALE, FONT, ensureFont, font, roundRect, drawBackground, drawAvatar, fitFont }
+};
