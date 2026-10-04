@@ -1,6 +1,7 @@
 const cfg = require('../config');
 const Economy = require('../../models/funeconomy/economy');
 const cooldown = require('../cooldown');
+const { rewardDaily } = require('../levelUp');
 const { fmt, displayName, send, errorLine, formatDuration, onCooldown } = require('../utils');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -31,11 +32,15 @@ module.exports = {
             );
         }
 
-        return send(message, [
+        const sent = await send(message, [
             `${cfg.EMOJI.DAILY} | **${name}**, Here is your daily **${cfg.CASH_EMOJI} ${fmt(result.amount)} ${cfg.CASH_NAME}**!`,
             `${cfg.EMOJI.DAILY} | You're on a **${fmt(result.streak)}** daily streak!`,
             `${cfg.EMOJI.TIMER} | Your next daily is in: ${formatDuration(msUntilReset(now))}`
         ].join('\n'));
+
+        // Bonus XP dari daily; level up diumumkan terpisah setelah pesan daily.
+        await rewardDaily({ userId, channel: message.channel, name, guildId: message.guild?.id });
+        return sent;
     },
     _internals: { dayNumber, msUntilReset, amountForStreak }
 };

@@ -29,6 +29,22 @@ Contoh: `slb`, `slb global`, `slb daily 5`, `slb level g`, `slb guild`, `smy`, `
 - Ganti emoji (mis. emoji custom server) di `CASH_EMOJI`, `COIN`, `SLOT_EMOJI`, dan `SLOT_SPINNING`.
 - Ranking per-server memakai server tempat user memakai command, lalu mengisi akun lama dari daftar anggota saat ranking server dibuka.
 
+## Level
+
+Chat memberi XP untuk akun terdaftar; kenaikan level memberi cash.
+
+| Command | Alias | Fungsi |
+|---|---|---|
+| `slevel [@user]` | lvl, xp | Lihat level, progres XP, XP hari ini, dan hadiah berikutnya |
+| `slevelup [on\|off]` | lvlup | Atur pesan level up di server (izin Manage Server diperlukan) |
+
+- Chat memberi 10–15 XP per menit, maksimal 3.000 XP chat per hari.
+- Bonus 500 XP untuk pesan pertama harian dan 100 XP saat `sdaily` berhasil, di luar batas chat.
+- Pesan bot, DM, command bot, pesan kurang dari 3 karakter, serta pesan terakhir yang sama tidak mendapat XP.
+- Hadiah level adalah 5.000 cash dikali nomor level. Hadiah masuk saldo meski pengumuman level up dimatikan.
+- Rumus XP dapat diubah pada `LEVELING.FORMULA` di `config.js`; `LEVELING.ENABLED: false` mematikan fitur.
+- `slb level` dan `smy level` memakai XP Fun Economy.
+
 ## Registrasi akun
 
 Semua command economy (prefix `s`, slash `/economy`, dan `/fun slots|coinflip|lottery|blackjack`) membutuhkan akun aktif.
@@ -46,6 +62,8 @@ Pengguna yang belum terdaftar melihat kartu Welcome dengan tombol Register; sete
 - `events/funEconomy.js` - listener `messageCreate` (dimuat otomatis oleh `handlers/events.js`)
 - `funeconomy/index.js` - dispatcher prefix `s` + loader command
 - `funeconomy/commands/*.js` - satu file per command (tambah file baru = command baru)
+- `funeconomy/leveling.js`, `funeconomy/levelUp.js`, dan `models/funeconomy/level.js` - rumus, penghargaan XP, dan data level
+- `events/funEconomyLevel.js` - listener XP chat
 - `funeconomy/register.js` - kartu & tombol Register, `models/funeconomy/registration.js` - logika akun
 - `events/funEconomyInteraction.js` - tombol blackjack & Register; `events/funEconomyReady.js` - jadwal lottery
 - `models/funeconomy/` - schema & operasi database (taruhan diproses atomik)

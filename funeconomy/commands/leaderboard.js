@@ -20,8 +20,8 @@ module.exports = {
         if (onCooldown(message, 'lb')) return;
 
         const { category, scope, count } = parsed;
-        // Level memakai data leveling per-server; kategori lain butuh daftar server tiap user
-        if (scope === 'guild' && category !== 'level') await backfillGuild(message.guild);
+        // Ranking per-server butuh daftar server tiap user.
+        if (scope === 'guild') await backfillGuild(message.guild);
 
         const rows = await CATEGORIES[category].top({ ...view.queryOptions(message, scope), limit: count });
         cooldown.start('lb', message.author.id);

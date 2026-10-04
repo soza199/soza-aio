@@ -40,6 +40,20 @@ module.exports = {
         PROMPT_COOLDOWN_MS: 15000
     },
 
+    // Level: XP dari chat hanya untuk akun yang sudah terdaftar.
+    LEVELING: {
+        ENABLED: true,
+        CHAT_XP_MIN: 10,
+        CHAT_XP_MAX: 15,
+        CHAT_COOLDOWN_MS: 60000,
+        DAILY_CHAT_XP_CAP: 3000,
+        FIRST_MESSAGE_BONUS: 500,
+        DAILY_COMMAND_XP: 100,
+        MIN_MESSAGE_LENGTH: 3,
+        REWARD_PER_LEVEL: 5000,
+        FORMULA: { BASE: 200, LINEAR: 100, QUADRATIC: 10 }
+    },
+
     // Durasi animasi coinflip ala OwO
     COINFLIP_ANIMATION_MS: 2000,
     // Durasi tiap tahap berhentinya reel slots (urutan: reel kiri, kanan, tengah)

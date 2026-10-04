@@ -11,6 +11,8 @@ const Registration = require('../../models/funeconomy/registration');
 const cfg = require('../../funeconomy/config');
 const { formatDuration, sleep, animateSlotReels } = require('../../funeconomy/utils');
 const cooldown = require('../../funeconomy/cooldown');
+const { grantDailyXp } = require('../../funeconomy/levelUp');
+const { fmt } = require('../../funeconomy/utils');
 const { registerGate } = require('../../funeconomy/register');
 const { dayNumber, msUntilReset, amountForStreak } =
     require('../../funeconomy/commands/daily')._internals;
@@ -127,12 +129,18 @@ module.exports = {
                     );
                 }
 
+                // Bonus XP dari daily; kalau naik level, hadiahnya ikut ditampilkan di panel ini
+                const levelResult = await grantDailyXp(userId);
+                const levelLine = levelResult && levelResult.levelAfter > levelResult.levelBefore
+                    ? `\n${cfg.EMOJI.LEVEL} **Level up!** You are now level **${fmt(levelResult.levelAfter)}** and received **${money(levelResult.reward)}**.`
+                    : '';
+
                 return show(
                     interaction,
                     '🎁 Daily cash claimed',
                     `You received **${money(result.amount)}**.\n` +
                     `**Streak:** ${result.streak} day${result.streak === 1 ? '' : 's'}\n` +
-                    `**Cash:** ${money(result.cash)}`,
+                    `**Cash:** ${money((levelResult?.cash ?? result.cash))}` + levelLine,
                     0x2ecc71
                 );
             }

@@ -19,6 +19,20 @@ const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // "<prefix><command>" lalu (opsional) spasi + argumen. Contoh: scash, scf 100 h, ss all
 const MATCHER = new RegExp(`^${escapeRegex(cfg.PREFIX)}([a-z]+)(?:\\s+([\\s\\S]*))?$`, 'i');
 
+/**
+ * Cocokkan pesan dengan command fun economy. Return { command, args } atau null.
+ * Command yang sengaja diabaikan dianggap obrolan biasa.
+ */
+function matchCommand(content) {
+    const match = MATCHER.exec(String(content).trim());
+    if (!match) return null;
+    const command = commands.get(match[1].toLowerCase());
+    if (!command) return null;
+    const args = (match[2] || '').trim().split(/\s+/).filter(Boolean);
+    if (command.ignore?.(args)) return null;
+    return { command, args };
+}
+
 /** Return true kalau pesan adalah command fun economy (dan sudah ditangani). */
 async function handleFunEconomy(message, client) {
     if (message.author.bot || !message.guild || !message.content) return false;
@@ -52,4 +66,4 @@ async function handleFunEconomy(message, client) {
     return true;
 }
 
-module.exports = { handleFunEconomy, commands };
+module.exports = { handleFunEconomy, matchCommand, commands };

@@ -1,5 +1,5 @@
 const FunEconomy = require('./schema');
-const UserLevel = require('../leveling/userLevelSchema');
+const { levelFromXp } = require('../../funeconomy/leveling');
 
 const DUPLICATE_KEY = 11000;
 
@@ -98,41 +98,19 @@ const daily = {
     }
 };
 
-// Level diambil dari sistem leveling yang sudah ada (per server). Global = jumlah XP semua server.
+// Level Fun Economy dari XP chat dan daily, dengan filter server seperti ranking cash.
 const level = {
     async top({ scope, guildId, limit }) {
-        if (scope === 'guild') {
-            const rows = await UserLevel.find({ guildId, totalXp: { $gt: 0 } })
-                .sort({ totalXp: -1, _id: 1 }).limit(limit).select('userId level totalXp').lean();
-            return rows.map((r) => ({ id: r.userId, value: r.totalXp, level: r.level }));
-        }
-        const rows = await UserLevel.aggregate([
-            { $group: { _id: '$userId', xp: { $sum: '$totalXp' } } },
-            { $match: { xp: { $gt: 0 } } },
-            { $sort: { xp: -1, _id: 1 } },
-            { $limit: limit }
-        ]);
-        return rows.map((r) => ({ id: r._id, value: r.xp }));
+        const rows = await FunEconomy.find({ xp: { $gt: 0 }, ...scopeFilter(scope, guildId) })
+            .sort({ xp: -1, _id: 1 }).limit(limit).select('userId xp level').lean();
+        return rows.map((r) => ({ id: r.userId, value: r.xp, level: r.level ?? levelFromXp(r.xp) }));
     },
     async rankOf(userId, { scope, guildId }) {
-        if (scope === 'guild') {
-            const me = await UserLevel.findOne({ userId, guildId }).select('level totalXp').lean();
-            if (!me || !me.totalXp) return null;
-            const ahead = await UserLevel.countDocuments({ guildId, totalXp: { $gt: me.totalXp } });
-            return { rank: ahead + 1, value: me.totalXp, level: me.level };
-        }
-        const mine = await UserLevel.aggregate([
-            { $match: { userId } },
-            { $group: { _id: '$userId', xp: { $sum: '$totalXp' } } }
-        ]);
-        const xp = mine[0]?.xp ?? 0;
+        const me = await FunEconomy.findOne({ userId, ...scopeFilter(scope, guildId) }).select('xp level').lean();
+        const xp = me?.xp ?? 0;
         if (xp <= 0) return null;
-        const ahead = await UserLevel.aggregate([
-            { $group: { _id: '$userId', xp: { $sum: '$totalXp' } } },
-            { $match: { xp: { $gt: xp } } },
-            { $count: 'n' }
-        ]);
-        return { rank: (ahead[0]?.n ?? 0) + 1, value: xp };
+        const ahead = await FunEconomy.countDocuments({ xp: { $gt: xp }, ...scopeFilter(scope, guildId) });
+        return { rank: ahead + 1, value: xp, level: me.level ?? levelFromXp(xp) };
     }
 };
 

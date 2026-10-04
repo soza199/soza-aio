@@ -51,7 +51,7 @@ function valueText(category, row, scope) {
         case 'money': return `${cfg.CASH_EMOJI} ${fmt(row.value)}`;
         case 'daily': return `${cfg.EMOJI.STREAK} ${plural(row.value, 'day')}`;
         case 'level':
-            return scope === 'guild' && row.level
+            return row.level
                 ? `${cfg.EMOJI.LEVEL} Lv ${fmt(row.level)} · ${fmt(row.value)} XP`
                 : `${cfg.EMOJI.LEVEL} ${fmt(row.value)} XP`;
         case 'guild': return `${cfg.CASH_EMOJI} ${fmt(row.value)} (${plural(row.members, 'member')})`;
