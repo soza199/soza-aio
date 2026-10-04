@@ -39,7 +39,10 @@ module.exports = {
         ].join('\n'));
 
         // Bonus XP dari daily; level up diumumkan terpisah setelah pesan daily.
-        await rewardDaily({ userId, channel: message.channel, name, guildId: message.guild?.id });
+        await rewardDaily({
+            userId, channel: message.channel, name, guildId: message.guild?.id,
+            avatarURL: message.author.displayAvatarURL?.({ extension: 'png', size: 256 }) ?? null
+        });
         return sent;
     },
     _internals: { dayNumber, msUntilReset, amountForStreak }

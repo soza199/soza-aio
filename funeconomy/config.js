@@ -50,9 +50,13 @@ module.exports = {
         FIRST_MESSAGE_BONUS: 500,
         DAILY_COMMAND_XP: 100,
         MIN_MESSAGE_LENGTH: 3,
+        // Hadiah level up ala OwO: naik ke level N memberi N x REWARD_PER_LEVEL cash (level 20 = 100.000).
         REWARD_PER_LEVEL: 5000,
+        // Kirim kartu gambar level up (jatuh ke teks biasa kalau bot tidak boleh upload file).
+        LEVELUP_CARD: true,
         FORMULA: { BASE: 200, LINEAR: 100, QUADRATIC: 10 }
     },
+
 
     // Durasi animasi coinflip ala OwO
     COINFLIP_ANIMATION_MS: 2000,
@@ -124,6 +128,7 @@ module.exports = {
         LOTTERY: '🎟️',
         STREAK: '🔥',
         LEVEL: '⭐',
+        LEVELUP: '🎉',
         GUILD: '🏰'
     }
 };

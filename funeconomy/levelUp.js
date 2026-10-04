@@ -1,23 +1,52 @@
 const cfg = require('./config');
 const Level = require('../models/funeconomy/level');
 const Registration = require('../models/funeconomy/registration');
+const { AttachmentBuilder, PermissionsBitField } = require('discord.js');
 const { fmt, displayName } = require('./utils');
 
 let mainPrefix = null;
 try { mainPrefix = require('../config.json').prefix || null; } catch { /* config.json optional */ }
 
-function levelUpText(name, result) {
-    const gained = result.levelAfter - result.levelBefore;
-    const head = gained > 1
-        ? `${cfg.EMOJI.LEVEL} | **${name}**, you leveled up from **${fmt(result.levelBefore)}** to **${fmt(result.levelAfter)}**!`
-        : `${cfg.EMOJI.LEVEL} | **${name}**, you leveled up! You are now level **${fmt(result.levelAfter)}**!`;
-    const reward = `${cfg.CASH_EMOJI} | You received **${fmt(result.reward)}** ${cfg.CASH_NAME} as a level reward!`;
-    return `${head}\n${reward}`;
+/** Teks level up (dipakai sebagai pesan utama dan fallback bila kartu tidak bisa dikirim). */
+function levelUpText(name, result, { withRewards = true } = {}) {
+    const head = `${cfg.EMOJI.LEVELUP} | **${name}** leveled up!`;
+    if (!withRewards) return head;
+    return `${head}\n${cfg.CASH_EMOJI} | **${fmt(result.reward)}** ${cfg.CASH_NAME}`;
 }
 
-async function announceLevelUp({ channel, name, guildId, result }) {
+function canAttach(channel) {
+    const me = channel.guild?.members?.me;
+    if (!me) return false;
+    const permissions = channel.permissionsFor?.(me);
+    return !!permissions?.has([PermissionsBitField.Flags.AttachFiles]);
+}
+
+async function buildCard({ channel, name, avatarURL, result }) {
+    if (!cfg.LEVELING.LEVELUP_CARD || !canAttach(channel)) return null;
+    try {
+        const { generateLevelUpCard } = require('./levelUpCard');
+        const buffer = await generateLevelUpCard({ name, avatarURL, level: result.levelAfter, reward: result.reward });
+        return new AttachmentBuilder(buffer, { name: 'levelup.png' });
+    } catch (error) {
+        console.error('[FUNECONOMY] Level up card failed:', error.message);
+        return null;
+    }
+}
+
+async function announceLevelUp({ channel, name, guildId, result, avatarURL = null }) {
     if (!result || result.levelAfter <= result.levelBefore) return false;
     if (guildId && !(await Level.isAnnounceEnabled(guildId))) return false;
+
+    // Format OwO: "🎉 | nama leveled up!" + kartu gambar berisi level dan hadiah.
+    const card = await buildCard({ channel, name, avatarURL, result });
+    if (card) {
+        await channel.send({
+            content: levelUpText(name, result, { withRewards: false }),
+            files: [card],
+            allowedMentions: { parse: [] }
+        });
+        return true;
+    }
     await channel.send({ content: levelUpText(name, result), allowedMentions: { parse: [] } });
     return true;
 }
@@ -32,10 +61,10 @@ async function grantDailyXp(userId) {
     }
 }
 
-async function rewardDaily({ userId, channel, name, guildId }) {
+async function rewardDaily({ userId, channel, name, guildId, avatarURL = null }) {
     const result = await grantDailyXp(userId);
     if (!result) return;
-    await announceLevelUp({ channel, name, guildId, result })
+    await announceLevelUp({ channel, name, guildId, result, avatarURL })
         .catch((error) => console.error('[FUNECONOMY] Level up message failed:', error.message));
 }
 
@@ -80,7 +109,8 @@ async function handleChat(message) {
         channel: message.channel,
         name: displayName(message),
         guildId: message.guild.id,
-        result
+        result,
+        avatarURL: message.author.displayAvatarURL?.({ extension: 'png', size: 256 }) ?? null
     });
 }
 
