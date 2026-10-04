@@ -5,16 +5,20 @@ const levelCardPreferenceSchema = new mongoose.Schema({
     backgroundBuffer: { type: Buffer, select: false }
 }, { timestamps: true });
 
+function asBuffer(value) {
+    if (Buffer.isBuffer(value)) return value;
+    if (value?.buffer && Buffer.isBuffer(value.buffer)) {
+        const length = Number.isInteger(value.position) ? value.position : value.buffer.length;
+        return Buffer.from(value.buffer.subarray(0, length));
+    }
+    if (ArrayBuffer.isView(value)) return Buffer.from(value);
+    return null;
+}
+
 levelCardPreferenceSchema.statics.getBackgroundBuffer = async function getBackgroundBuffer(userId) {
     const preference = await this.findOne({ userId })
-        .select('+backgroundBuffer')
-        .lean();
-    const backgroundBuffer = preference?.backgroundBuffer;
-    return Buffer.isBuffer(backgroundBuffer)
-        ? backgroundBuffer
-        : backgroundBuffer
-            ? Buffer.from(backgroundBuffer)
-            : null;
+        .select('+backgroundBuffer');
+    return asBuffer(preference?.backgroundBuffer);
 };
 
 levelCardPreferenceSchema.statics.setBackgroundBuffer = async function setBackgroundBuffer(userId, backgroundBuffer) {

@@ -71,9 +71,13 @@ async function uploadBackground(interaction) {
         const uploadedImage = await readAttachment(response);
         const normalizedImage = await normalizeCardBackground(uploadedImage, mimeType);
         await LevelCardPreference.setBackgroundBuffer(interaction.user.id, normalizedImage);
+        const savedImage = await LevelCardPreference.getBackgroundBuffer(interaction.user.id);
+        if (!savedImage?.equals(normalizedImage)) {
+            throw new Error('Gambar latar tidak dapat diverifikasi setelah disimpan.');
+        }
 
         return interaction.editReply(
-            '✅ Gambar dari galeri Anda sudah disimpan. Jalankan `slevel` untuk melihat kartu level.'
+            '✅ Gambar dari galeri Anda sudah disimpan dan diverifikasi. Jalankan `slevel` untuk melihat kartu level.'
         );
     } catch (error) {
         if (error.code === 'INVALID_CARD_BACKGROUND') {
