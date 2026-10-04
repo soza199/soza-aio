@@ -168,18 +168,27 @@ function fitFont(ctx, text, startSize, maxWidth) {
 
 /**
  * Buat kartu level up (PNG Buffer).
- * @param {{ name?: string, avatarURL?: string|null, level: number, reward: number }} opts
+ * @param {{ name?: string, avatarURL?: string|null, level: number, reward: number, backgroundBuffer?: Buffer|null }} opts
  */
-async function generateLevelUpCard({ name, avatarURL, level, reward }) {
+async function generateLevelUpCard({ name, avatarURL, level, reward, backgroundBuffer }) {
     ensureFont();
     const canvas = createCanvas(W * SCALE, H * SCALE);
     const ctx = canvas.getContext('2d');
     ctx.scale(SCALE, SCALE);
 
+    let backgroundImage = null;
+    if (Buffer.isBuffer(backgroundBuffer)) {
+        try {
+            backgroundImage = await loadImage(backgroundBuffer);
+        } catch (error) {
+            console.error('[FUNECONOMY] Level-up card background failed:', error.message);
+        }
+    }
+
     ctx.save();
     roundRect(ctx, 0, 0, W, H, 28);
     ctx.clip();
-    drawBackground(ctx);
+    drawBackground(ctx, backgroundImage);
 
     const avatarRight = await drawAvatar(ctx, avatarURL, name);
 

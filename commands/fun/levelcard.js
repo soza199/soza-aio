@@ -77,7 +77,7 @@ async function uploadBackground(interaction) {
         }
 
         return interaction.editReply(
-            '✅ Gambar dari galeri Anda sudah disimpan dan diverifikasi. Jalankan `slevel` untuk melihat kartu level.'
+            '✅ Gambar dari galeri Anda sudah disimpan dan diverifikasi. Gambar ini dipakai untuk kartu `slevel` dan notifikasi saat Anda naik level.'
         );
     } catch (error) {
         if (error.code === 'INVALID_CARD_BACKGROUND') {
@@ -93,7 +93,7 @@ module.exports = {
     category: 'fun',
     data: new SlashCommandBuilder()
         .setName('levelcard')
-        .setDescription('Atur gambar latar kartu level Anda')
+        .setDescription('Atur gambar latar kartu level dan notifikasi level-up Anda')
         .addSubcommand((subcommand) =>
             subcommand
                 .setName('upload')
@@ -122,7 +122,7 @@ module.exports = {
         if (interaction.options.getSubcommand() === 'reset') {
             await LevelCardPreference.resetBackground(interaction.user.id);
             return interaction.reply({
-                content: '✅ Gambar latar kartu dikembalikan ke bawaan.',
+                content: '✅ Gambar latar kartu level dan notifikasi level-up dikembalikan ke bawaan.',
                 ephemeral: true,
                 allowedMentions: { parse: [] }
             });
