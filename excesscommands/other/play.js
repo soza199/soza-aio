@@ -20,6 +20,59 @@ function withTimeout(promise, timeoutMs, label) {
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function waitForDisTubeStart(distube, guildId, timeoutMs = 30000) {
+    let resolveStart;
+    let rejectStart;
+    let settled = false;
+    let timer;
+
+    const promise = new Promise((resolve, reject) => {
+        resolveStart = resolve;
+        rejectStart = reject;
+    });
+
+    const cleanup = () => {
+        clearTimeout(timer);
+        distube.off('playSong', onPlaySong);
+        distube.off('error', onError);
+    };
+
+    const settle = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        callback(value);
+    };
+
+    const onPlaySong = (queue, song) => {
+        const startedGuildId = queue?.voiceChannel?.guild?.id || queue?.textChannel?.guild?.id;
+        if (String(startedGuildId) === String(guildId)) {
+            settle(resolveStart, song);
+        }
+    };
+
+    const onError = (channel, error) => {
+        if (String(channel?.guild?.id) === String(guildId)) {
+            settle(rejectStart, error);
+        }
+    };
+
+    distube.on('playSong', onPlaySong);
+    distube.on('error', onError);
+    timer = setTimeout(() => {
+        settle(rejectStart, new Error('Playback did not start before the timeout'));
+    }, timeoutMs);
+
+    return {
+        promise,
+        cancel() {
+            if (settled) return;
+            settled = true;
+            cleanup();
+        }
+    };
+}
+
 const guildPlayLocks = new Map();
 const nodeHealthCache = new WeakMap();
 let nodeResolutionQueue = Promise.resolve();
@@ -172,11 +225,8 @@ module.exports = {
             return temporaryReply(message, '❌ I need **Connect** and **Speak** permission in that voice channel.');
         }
 
-        if (!client.riffy) {
-            return temporaryReply(message, '❌ The music system is not ready yet. Please try again shortly.');
-        }
-
         const guildId = message.guild.id;
+        const spotifyUrl = parseSpotifyUrl(query);
 
         // Prefix `.play` is the simple YouTube playback path. Prefer the
         // local yt-dlp-backed DisTube player here instead of sending every
@@ -184,41 +234,65 @@ module.exports = {
         // a valid search result but reject the stream a few seconds later.
         // Keep Spotify on the Riffy path because this command already supports
         // Spotify collection expansion there.
-        if (
-            client.distube &&
-            typeof client.playMusic === 'function' &&
-            !parseSpotifyUrl(query)
-        ) {
+        if (!spotifyUrl) {
+            if (!client.distube || typeof client.playMusic !== 'function') {
+                return temporaryReply(
+                    message,
+                    '⏳ Pemutar musik sedang disiapkan atau tidak tersedia. Coba lagi sebentar.'
+                );
+            }
+
             return withGuildPlayLock(guildId, async () => {
                 destroyGuildPlayer(client, guildId);
+                const existingQueue = client.distube.getQueue?.(guildId);
+                const isAlreadyPlaying = Boolean(existingQueue?.playing || existingQueue?.paused);
+                const startWaiter = isAlreadyPlaying
+                    ? null
+                    : waitForDisTubeStart(client.distube, guildId);
+                let statusMessage = null;
 
                 try {
+                    statusMessage = await message.reply('⏳ Menyiapkan lagu; saya akan memberi tahu setelah audio benar-benar mulai.');
                     await maximizeVoiceChannelBitrate(voiceChannel);
-                    await client.playMusic(voiceChannel, query, {
+                    const queue = await client.playMusic(voiceChannel, query, {
                         member: message.member,
                         textChannel: message.channel,
                         timeout: 60000
                     });
 
-                    const reply = await message.reply(`🎵 Added **${query}** to the music queue.`);
-                    setTimeout(() => reply.delete().catch(() => {}), 6000);
+                    const startedSong = startWaiter ? await startWaiter.promise : null;
+                    const songName = startedSong?.name || queue?.songs?.at(-1)?.name || query;
+                    const replyText = isAlreadyPlaying
+                        ? `🎵 Added **${songName}** to the music queue.`
+                        : `▶️ Audio started: **${songName}**`;
+                    await statusMessage.edit(replyText);
+                    setTimeout(() => statusMessage.delete().catch(() => {}), 6000);
                 } catch (error) {
                     console.error('[DISTUBE] Prefix music play error:', error);
                     const queue = client.distube.getQueue?.(guildId);
-                    if (queue) {
+                    if (queue && !isAlreadyPlaying) {
                         await client.distube.stop(guildId).catch(() => {});
                     }
 
-                    return temporaryReply(
-                        message,
-                        '❌ Saya tidak bisa memutar lagu itu melalui YouTube. Coba URL atau judul lagu lain.'
-                    );
+                    const errorReply = '❌ Lagu belum berhasil mulai diputar. Coba judul atau URL lain; jika berulang, admin perlu memeriksa log pemutar musik.';
+                    if (statusMessage) {
+                        await statusMessage.edit(errorReply).catch(() => {});
+                        setTimeout(() => statusMessage.delete().catch(() => {}), 6000);
+                        return statusMessage;
+                    }
+                    return temporaryReply(message, errorReply);
+                } finally {
+                    startWaiter?.cancel();
                 }
             });
         }
 
+        if (!client.riffy) {
+            return temporaryReply(message, '❌ Lavalink belum siap untuk memutar tautan Spotify. Coba lagi sebentar.');
+        }
+
         return withGuildPlayLock(guildId, async () => {
-        const parsedSpotify = parseSpotifyUrl(query);
+        const parsedSpotify = spotifyUrl;
         let spotifyRequest = parsedSpotify
             ? { ...parsedSpotify, name: null, queries: [], partial: false }
             : null;

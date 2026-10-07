@@ -64,63 +64,18 @@ module.exports = async (client) => {
 
    
     client.playMusic = async (channel, query, options = {}) => {
-        try {
-         //    console.log(`Attempting to play: ${query} in channel: ${channel.name}`);
-            
-          
-            const connection = await client.distube.voices.join(channel);
-         //    console.log(`Successfully joined voice channel: ${channel.name}`);
-            
-        
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-        
-            const queue = await client.distube.play(channel, query, {
-                textChannel: options.textChannel || null,
-                member: options.member || null,
-                ...options
-            });
-            
-          //   console.log(`Successfully started playing: ${query}`);
-            return queue;
-            
-        } catch (error) {
-         //    console.error('Error in playMusic function:', error);
-            
-          
-            if (error.message.includes('VOICE_CONNECT_FAILED') || error.message.includes('connection')) {
-             //    console.log('Retrying connection...');
-                try {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    const connection = await client.distube.voices.join(channel);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    const queue = await client.distube.play(channel, query, {
-                        textChannel: options.textChannel || null,
-                        member: options.member || null,
-                        ...options
-                    });
-                    
-                  //   console.log(`Successfully played after retry: ${query}`);
-                    return queue;
-                    
-                } catch (retryError) {
-              //       console.error('Retry failed:', retryError);
-                    throw retryError;
-                }
-            }
-            throw error;
-        }
+        return client.distube.play(channel, query, {
+            textChannel: options.textChannel || null,
+            member: options.member || null,
+            ...options
+        });
     };
 
    
     client.distube.on('playSong', async (queue, song) => {
-     //    console.log(`Now playing: ${song.name} in ${queue.voiceChannel?.name}`);
-        
-
-        if (queue.voiceChannel) {
-            await cleanupMessages(queue.voiceChannel.guild.id);
-        }
+        const guildId = queue.voiceChannel?.guild?.id || queue.textChannel?.guild?.id;
+        console.log(`[DISTUBE] Playback started in guild ${guildId || 'unknown'}: ${song.name}`);
+        if (guildId) await cleanupMessages(guildId);
         
         if (queue.textChannel) {
             try {
@@ -149,12 +104,10 @@ module.exports = async (client) => {
                 });
                 
              
-                addMessageForCleanup(queue.voiceChannel.guild.id, message);
+                if (guildId) addMessageForCleanup(guildId, message);
                 
             } catch (error) {
-             //    console.error('Error sending music card:', error);
-                
-           
+                console.error('[DISTUBE] Could not send music card; trying a plain embed:', error);
                 const fallbackEmbed = new EmbedBuilder()
                     .setColor(0xDC92FF)
                     .setAuthor({ name: 'Now playing', iconURL: musicIcons.playerIcon })
@@ -165,11 +118,21 @@ module.exports = async (client) => {
                     
                 try {
                     const message = await queue.textChannel.send({ embeds: [fallbackEmbed] });
-                    addMessageForCleanup(queue.voiceChannel.guild.id, message);
-                } catch (err) {
-                //     console.error('Error sending fallback embed:', err);
+                    if (guildId) addMessageForCleanup(guildId, message);
+                } catch (fallbackError) {
+                    console.error('[DISTUBE] Could not send the fallback now-playing embed:', fallbackError);
+                    try {
+                        const message = await queue.textChannel.send(
+                            `🎵 Now playing: **${song.name}** (${song.formattedDuration})`
+                        );
+                        if (guildId) addMessageForCleanup(guildId, message);
+                    } catch (plainMessageError) {
+                        console.error('[DISTUBE] Could not send the now-playing message:', plainMessageError);
+                    }
                 }
             }
+        } else {
+            console.warn(`[DISTUBE] Playback started for ${song.name}, but no text channel is available for the now-playing panel.`);
         }
     });
 
@@ -362,9 +325,8 @@ module.exports = async (client) => {
 
     
     client.distube.on('error', async (channel, error) => {
-      //   console.error('DisTube error:', error);
-        
-       
+        console.error('[DISTUBE] Playback error:', error);
+
         if (channel && channel.guild) {
             await cleanupMessages(channel.guild.id);
         }
@@ -391,8 +353,8 @@ module.exports = async (client) => {
                     }
                 }, 8000);
                 
-            } catch (err) {
-              //   console.error('Error sending error message:', err);
+            } catch (sendError) {
+                console.error('[DISTUBE] Could not send the playback error message:', sendError);
             }
         }
     });
