@@ -21,11 +21,11 @@ When a track error may be caused by a degraded Lavalink node, `client.riffy.migr
 
 **How to apply:** Before retrying a failed track, migrate only when another connected node exists, then resolve replacement tracks against `player.node`.
 
-Prefix `.play` playback should use the local DisTube/yt-dlp path for YouTube instead of public Lavalink extraction; the user confirmed this resolves the recurring unavailable-track behavior.
+Prefix `.play` and slash `/music` should use Riffy/Lavalink. DisTube belongs only to its separate command path unless the user explicitly requests a different engine for `.play`.
 
-**Why:** Public Lavalink extractors can resolve a YouTube result successfully but fail when opening its audio stream.
+**Why:** The user explicitly chose the same Riffy/Lavalink engine for `.play` and `/music`, and distinguished the command they type from the separate `/distube` command group.
 
-**How to apply:** Keep Riffy for the slash music/Spotify path unless the local extractor is unavailable, and ensure stopping music cleans up both player engines.
+**How to apply:** Route ordinary and Spotify `.play` requests through Riffy. For a new session, wait for the matching guild's `trackStart` event before saying the song started; if a queue is already playing or paused, say only that the song was added.
 
 Riffy's finite reconnect loop can leave a disconnected node in `nodeMap` after retries are exhausted, so recovery must reset/reconnect that node or recreate it from configuration.
 

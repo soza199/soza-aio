@@ -20,7 +20,7 @@ function withTimeout(promise, timeoutMs, label) {
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-function waitForDisTubeStart(distube, guildId, timeoutMs = 30000) {
+function waitForRiffyTrackStart(riffy, guildId, timeoutMs = 25000) {
     let resolveStart;
     let rejectStart;
     let settled = false;
@@ -33,8 +33,8 @@ function waitForDisTubeStart(distube, guildId, timeoutMs = 30000) {
 
     const cleanup = () => {
         clearTimeout(timer);
-        distube.off('playSong', onPlaySong);
-        distube.off('error', onError);
+        riffy.off('trackStart', onTrackStart);
+        riffy.off('playerDestroy', onPlayerDestroy);
     };
 
     const settle = (callback, value) => {
@@ -44,23 +44,22 @@ function waitForDisTubeStart(distube, guildId, timeoutMs = 30000) {
         callback(value);
     };
 
-    const onPlaySong = (queue, song) => {
-        const startedGuildId = queue?.voiceChannel?.guild?.id || queue?.textChannel?.guild?.id;
-        if (String(startedGuildId) === String(guildId)) {
-            settle(resolveStart, song);
+    const onTrackStart = (player, track) => {
+        if (String(player?.guildId) === String(guildId)) {
+            settle(resolveStart, { player, track });
         }
     };
 
-    const onError = (channel, error) => {
-        if (String(channel?.guild?.id) === String(guildId)) {
-            settle(rejectStart, error);
+    const onPlayerDestroy = (player) => {
+        if (String(player?.guildId) === String(guildId)) {
+            settle(rejectStart, new Error('Lavalink player ended before playback started'));
         }
     };
 
-    distube.on('playSong', onPlaySong);
-    distube.on('error', onError);
+    riffy.on('trackStart', onTrackStart);
+    riffy.on('playerDestroy', onPlayerDestroy);
     timer = setTimeout(() => {
-        settle(rejectStart, new Error('Playback did not start before the timeout'));
+        settle(rejectStart, new Error('Lavalink did not report a track start before the timeout'));
     }, timeoutMs);
 
     return {
@@ -189,6 +188,10 @@ function getPlaybackFailureMessage(error) {
         return 'Server Lavalink tidak merespons saat memulai audio.';
     }
 
+    if (message.includes('track start') || message.includes('before playback started')) {
+        return 'Lavalink tidak mengonfirmasi bahwa audio mulai diputar. Coba lagi atau pilih judul lain.';
+    }
+
     if (message.includes('timed out') || message.includes('timeout')) {
         return 'Koneksi voice atau Lavalink belum siap. Tunggu beberapa detik lalu coba lagi.';
     }
@@ -226,73 +229,13 @@ module.exports = {
         }
 
         const guildId = message.guild.id;
-        const spotifyUrl = parseSpotifyUrl(query);
-
-        // Prefix `.play` is the simple YouTube playback path. Prefer the
-        // local yt-dlp-backed DisTube player here instead of sending every
-        // YouTube request through public Lavalink extractors, which can return
-        // a valid search result but reject the stream a few seconds later.
-        // Keep Spotify on the Riffy path because this command already supports
-        // Spotify collection expansion there.
-        if (!spotifyUrl) {
-            if (!client.distube || typeof client.playMusic !== 'function') {
-                return temporaryReply(
-                    message,
-                    '⏳ Pemutar musik sedang disiapkan atau tidak tersedia. Coba lagi sebentar.'
-                );
-            }
-
-            return withGuildPlayLock(guildId, async () => {
-                destroyGuildPlayer(client, guildId);
-                const existingQueue = client.distube.getQueue?.(guildId);
-                const isAlreadyPlaying = Boolean(existingQueue?.playing || existingQueue?.paused);
-                const startWaiter = isAlreadyPlaying
-                    ? null
-                    : waitForDisTubeStart(client.distube, guildId);
-                let statusMessage = null;
-
-                try {
-                    statusMessage = await message.reply('⏳ Menyiapkan lagu; saya akan memberi tahu setelah audio benar-benar mulai.');
-                    await maximizeVoiceChannelBitrate(voiceChannel);
-                    const queue = await client.playMusic(voiceChannel, query, {
-                        member: message.member,
-                        textChannel: message.channel,
-                        timeout: 60000
-                    });
-
-                    const startedSong = startWaiter ? await startWaiter.promise : null;
-                    const songName = startedSong?.name || queue?.songs?.at(-1)?.name || query;
-                    const replyText = isAlreadyPlaying
-                        ? `🎵 Added **${songName}** to the music queue.`
-                        : `▶️ Audio started: **${songName}**`;
-                    await statusMessage.edit(replyText);
-                    setTimeout(() => statusMessage.delete().catch(() => {}), 6000);
-                } catch (error) {
-                    console.error('[DISTUBE] Prefix music play error:', error);
-                    const queue = client.distube.getQueue?.(guildId);
-                    if (queue && !isAlreadyPlaying) {
-                        await client.distube.stop(guildId).catch(() => {});
-                    }
-
-                    const errorReply = '❌ Lagu belum berhasil mulai diputar. Coba judul atau URL lain; jika berulang, admin perlu memeriksa log pemutar musik.';
-                    if (statusMessage) {
-                        await statusMessage.edit(errorReply).catch(() => {});
-                        setTimeout(() => statusMessage.delete().catch(() => {}), 6000);
-                        return statusMessage;
-                    }
-                    return temporaryReply(message, errorReply);
-                } finally {
-                    startWaiter?.cancel();
-                }
-            });
-        }
-
+        const parsedSpotify = parseSpotifyUrl(query);
         if (!client.riffy) {
-            return temporaryReply(message, '❌ Lavalink belum siap untuk memutar tautan Spotify. Coba lagi sebentar.');
+            return temporaryReply(message, '❌ The Lavalink music system is not ready yet. Please try again shortly.');
         }
 
         return withGuildPlayLock(guildId, async () => {
-        const parsedSpotify = spotifyUrl;
+        const statusMessage = await message.reply('⏳ Mencari lagu dan menunggu audio mulai diputar...');
         let spotifyRequest = parsedSpotify
             ? { ...parsedSpotify, name: null, queries: [], partial: false }
             : null;
@@ -353,6 +296,7 @@ module.exports = {
                 const tracks = [];
                 let lastTrackError = null;
                 let startedPlayback = false;
+                let startedTrack = null;
                 const addTrackAndStart = async (track) => {
                     track.requester = {
                         id: message.author.id,
@@ -367,9 +311,19 @@ module.exports = {
                     // starting audio. TrackStart (and the now-playing
                     // panel) should happen as soon as the first result
                     // is available; remaining results can fill the queue.
-                    if (!startedPlayback && !player.playing && !player.paused) {
-                        await withTimeout(player.play(), 20000, 'Lavalink playback');
-                        startedPlayback = true;
+                    if (
+                        !startedPlayback &&
+                        (!player.current || (!player.playing && !player.paused))
+                    ) {
+                        const startWaiter = waitForRiffyTrackStart(client.riffy, guildId);
+                        try {
+                            await withTimeout(player.play(), 20000, 'Lavalink playback');
+                            const started = await startWaiter.promise;
+                            startedTrack = started.track;
+                            startedPlayback = true;
+                        } finally {
+                            startWaiter.cancel();
+                        }
                     }
                 };
 
@@ -392,7 +346,7 @@ module.exports = {
                             for (const track of collectionResult.tracks) {
                                 await addTrackAndStart(track);
                             }
-                            return { player, track: tracks[0], tracks };
+                            return { player, track: tracks[0], tracks, startedPlayback, startedTrack };
                         }
                     } catch (error) {
                         console.warn('[RIFFY] Native Spotify collection load failed; using track fallback:', error.message);
@@ -414,7 +368,7 @@ module.exports = {
                 if (!tracks.length && lastTrackError) throw lastTrackError;
                 if (!tracks.length) return { player, track: null, tracks };
 
-                return { player, track: tracks[0], tracks };
+                return { player, track: tracks[0], tracks, startedPlayback, startedTrack };
             };
 
             try {
@@ -453,7 +407,9 @@ module.exports = {
                 }
 
                 if (!result.track) {
-                    return temporaryReply(message, `❌ No tracks found for **${query}**.`);
+                    await statusMessage.edit(`❌ No tracks found for **${query}**.`);
+                    setTimeout(() => statusMessage.delete().catch(() => {}), 6000);
+                    return statusMessage;
                 }
 
                 const position = result.player.queue.length;
@@ -462,19 +418,23 @@ module.exports = {
                 const partialWarning = spotifyRequest?.partial
                     ? '\n⚠️ Metadata publik Spotify hanya mengembalikan sebagian lagu. Tambahkan SPOTIFY_CLIENT_ID dan SPOTIFY_CLIENT_SECRET agar seluruh isi dimuat.'
                     : '';
-                const reply = await message.reply(
-                    spotifyRequest
-                        ? `🎵 Spotify ${collectionLabel} **${spotifyRequest.name}** ditambahkan ke queue.\n✅ **${addedCount}** lagu berhasil ditambahkan.\n📍 Queue sekarang: **${position}** lagu${partialWarning}`
-                        : `🎵 Added **${result.track.info.title}** to the queue.\n📍 Position: **#${position}**`
-                );
+                const startedTrackTitle = result.startedTrack?.info?.title || result.startedTrack?.title;
+                const currentTrackTitle = result.track.info.title;
+                const replyText = spotifyRequest
+                    ? `🎵 Spotify ${collectionLabel} **${spotifyRequest.name}** ditambahkan ke queue.\n✅ **${addedCount}** lagu berhasil ditambahkan.${result.startedPlayback ? `\n▶️ Lagu pertama mulai diputar: **${startedTrackTitle || currentTrackTitle}**.` : ''}\n📍 Queue sekarang: **${position}** lagu${partialWarning}`
+                    : result.startedPlayback
+                        ? `▶️ Sedang diputar: **${startedTrackTitle || currentTrackTitle}**`
+                        : `🎵 Ditambahkan ke queue: **${currentTrackTitle}**\n📍 Posisi: **#${position}**`;
+                const reply = await statusMessage.edit(replyText);
                 setTimeout(() => reply.delete().catch(() => {}), 6000);
             } catch (error) {
                 console.error('Prefix music play error:', error);
                 destroyGuildPlayer(client, guildId);
-                return temporaryReply(
-                    message,
+                const reply = await statusMessage.edit(
                     `❌ Saya tidak bisa memutar lagu itu.\n${getPlaybackFailureMessage(error)}\n\nCoba lagi setelah beberapa detik.`
-                );
+                ).catch(() => null);
+                setTimeout(() => statusMessage.delete().catch(() => {}), 10000);
+                return reply || statusMessage;
             }
         });
     }
