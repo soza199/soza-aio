@@ -150,9 +150,14 @@ async function waitForHealthyNode(client, timeoutMs = 15000, excludedNodes = new
             .filter(node => !excludedNodes.has(node))
             .sort((a, b) => (a.rest?.calls || 0) - (b.rest?.calls || 0));
 
-        for (const node of candidates) {
-            if (await checkNodeHealth(node)) return node;
-        }
+        const healthChecks = await Promise.all(
+            candidates.map(async node => ({
+                node,
+                healthy: await checkNodeHealth(node)
+            }))
+        );
+        const healthyNode = healthChecks.find(result => result.healthy)?.node;
+        if (healthyNode) return healthyNode;
 
         await new Promise(resolve => setTimeout(resolve, 250));
     }
@@ -239,16 +244,18 @@ module.exports = {
         let spotifyRequest = parsedSpotify
             ? { ...parsedSpotify, name: null, queries: [], partial: false }
             : null;
-        if (parsedSpotify) {
-            try {
-                const metadataRequest = await getSpotifyTrackQueries(query);
-                if (metadataRequest) spotifyRequest = metadataRequest;
-            } catch (error) {
+        const spotifyMetadataPromise = parsedSpotify
+            ? getSpotifyTrackQueries(query).catch(error => {
                 // A private link or a failed public metadata request can still
                 // be playable by a Lavalink node with Spotify support.
                 console.warn('Spotify metadata lookup failed; trying Lavalink directly:', error.message);
-            }
-        }
+                return null;
+            })
+            : Promise.resolve(null);
+        const loadSpotifyMetadata = async () => {
+            const metadataRequest = await spotifyMetadataPromise;
+            if (metadataRequest) spotifyRequest = metadataRequest;
+        };
 
             const createPlayer = (node) => withTimeout(
                     client.riffy.createPlayer(node, {
@@ -261,14 +268,14 @@ module.exports = {
                     'Lavalink voice connection'
                 );
 
-            const resolveTrack = (node, searchQuery = query) => withNodeResolutionLock(async () => {
+            const resolveTrack = (node, searchQuery = query, timeoutMs = 20000) => withNodeResolutionLock(async () => {
                 return withTimeout(
                     client.riffy.resolve({
                         query: searchQuery,
                         requester: message.author,
                         node
                     }),
-                    20000,
+                    timeoutMs,
                     'Track search'
                 );
             });
@@ -290,11 +297,9 @@ module.exports = {
                     player = await createPlayer(lastAttemptNode);
                 }
 
-                const queries = spotifyRequest?.queries?.length
-                    ? spotifyRequest.queries
-                    : [query];
                 const tracks = [];
                 let lastTrackError = null;
+                let failedTrackCount = 0;
                 let startedPlayback = false;
                 let startedTrack = null;
                 const addTrackAndStart = async (track) => {
@@ -332,43 +337,84 @@ module.exports = {
                 // (including 100+ tracks), unlike public page metadata which
                 // is commonly limited to eight preview items.
                 if (spotifyRequest?.type === 'playlist' || spotifyRequest?.type === 'album') {
+                    let collectionResult = null;
                     try {
-                        const collectionResult = await resolveTrack(lastAttemptNode, query);
-                        if (
-                            collectionResult?.loadType === 'playlist' &&
-                            collectionResult.tracks?.length
-                        ) {
-                            spotifyRequest = {
-                                ...spotifyRequest,
-                                name: collectionResult.playlistInfo?.name || spotifyRequest.name,
-                                partial: false
-                            };
-                            for (const track of collectionResult.tracks) {
-                                await addTrackAndStart(track);
-                            }
-                            return { player, track: tracks[0], tracks, startedPlayback, startedTrack };
-                        }
+                        collectionResult = await resolveTrack(lastAttemptNode, query, 8000);
                     } catch (error) {
                         console.warn('[RIFFY] Native Spotify collection load failed; using track fallback:', error.message);
                     }
+
+                    if (
+                        collectionResult?.loadType === 'playlist' &&
+                        collectionResult.tracks?.length
+                    ) {
+                        spotifyRequest = {
+                            ...spotifyRequest,
+                            name: collectionResult.playlistInfo?.name || spotifyRequest.name,
+                            partial: false
+                        };
+                        for (const track of collectionResult.tracks) {
+                            await addTrackAndStart(track);
+                        }
+                        return { player, track: tracks[0], tracks, startedPlayback, startedTrack };
+                    }
                 }
 
-                for (const searchQuery of queries) {
+                await loadSpotifyMetadata();
+                const queries = spotifyRequest?.queries?.length
+                    ? spotifyRequest.queries
+                    : [query];
+                let nextQueryIndex = 0;
+                for (; nextQueryIndex < queries.length; nextQueryIndex++) {
+                    const searchQuery = queries[nextQueryIndex];
                     try {
-                        const result = await resolveTrack(lastAttemptNode, searchQuery);
+                        const result = await resolveTrack(
+                            lastAttemptNode,
+                            searchQuery,
+                            parsedSpotify ? 12000 : 20000
+                        );
                         if (result?.tracks?.length) {
                             await addTrackAndStart(result.tracks[0]);
+                            nextQueryIndex++;
+                            break;
                         }
                     } catch (error) {
                         lastTrackError = error;
+                        failedTrackCount++;
                         console.warn(`[RIFFY] Could not resolve "${searchQuery}":`, error.message);
                     }
+                    if (!tracks.length) failedTrackCount++;
                 }
 
                 if (!tracks.length && lastTrackError) throw lastTrackError;
                 if (!tracks.length) return { player, track: null, tracks };
 
-                return { player, track: tracks[0], tracks, startedPlayback, startedTrack };
+                let queueFillPromise = null;
+                const remainingQueries = queries.slice(nextQueryIndex);
+                if (
+                    remainingQueries.length &&
+                    (spotifyRequest?.type === 'playlist' || spotifyRequest?.type === 'album')
+                ) {
+                    queueFillPromise = (async () => {
+                        let failedCount = failedTrackCount;
+                        for (const searchQuery of remainingQueries) {
+                            try {
+                                const result = await resolveTrack(lastAttemptNode, searchQuery, 12000);
+                                if (result?.tracks?.length) {
+                                    await addTrackAndStart(result.tracks[0]);
+                                } else {
+                                    failedCount++;
+                                }
+                            } catch (error) {
+                                failedCount++;
+                                console.warn(`[RIFFY] Could not queue "${searchQuery}":`, error.message);
+                            }
+                        }
+                        return { failedCount };
+                    })();
+                }
+
+                return { player, track: tracks[0], tracks, startedPlayback, startedTrack, queueFillPromise };
             };
 
             try {
