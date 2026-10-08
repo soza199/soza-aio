@@ -760,6 +760,7 @@ module.exports = {
                     if (!player) return;
                     
                     const queueLength = player.queue.length;
+                    player.__manualStop = true;
                     player.destroy();
                     
                     const stopContainer = new ContainerBuilder()

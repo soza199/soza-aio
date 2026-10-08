@@ -115,16 +115,21 @@ async function handlePrefixMusic(message, client, commandName, args) {
     const guildId = message.guild.id;
 
     if (commandName === 'stop') {
-        let stopped = await stopRiffyPlayer(client, guildId);
-        if (client.distube?.getQueue?.(guildId)) {
-            await client.distube.stop(guildId);
-            await client.cleanupMusicMessages?.(guildId);
-            stopped = true;
-        }
+        try {
+            let stopped = await stopRiffyPlayer(client, guildId);
+            if (client.distube?.getQueue?.(guildId)) {
+                await client.distube.stop(guildId);
+                await client.cleanupMusicMessages?.(guildId);
+                stopped = true;
+            }
 
-        await message.reply(stopped
-            ? '⏹️ Music stopped and the queue was cleared.'
-            : 'There is no music playing in this server.');
+            await message.reply(stopped
+                ? '⏹️ Music stopped and the queue was cleared.'
+                : 'There is no music playing in this server.');
+        } catch (error) {
+            console.error(`[PREFIX MUSIC] Failed to stop playback in guild ${guildId}:`, error);
+            await message.reply('❌ I could not stop the current playback.');
+        }
         return true;
     }
 

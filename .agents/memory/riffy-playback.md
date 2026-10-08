@@ -9,11 +9,11 @@ Riffy's `createPlayer()` establishes the voice request but playlist playback doe
 
 **How to apply:** Queue and start the first successful result immediately, then resolve and append remaining tracks. Pass the selected node through Riffy's `resolve({ node })` option rather than relying on an unsupported node selector property.
 
-Lavalink may emit `TrackStartEvent` before YouTube rejects the actual source stream with `TrackExceptionEvent`, so a green voice connection or “Active” panel does not prove that audio is flowing.
+Lavalink may emit `TrackStartEvent` before YouTube rejects the actual source stream with `TrackExceptionEvent`; `queueEnd` can race with that error, so a green voice connection or “Active” panel does not prove that audio is flowing.
 
-**Why:** Track selection and source-stream acquisition happen as separate Lavalink steps.
+**Why:** Track selection and source-stream acquisition happen as separate Lavalink steps, and asynchronous cleanup can let autoplay react to `queueEnd` before the error-recovery handler claims the player.
 
-**How to apply:** Remove stale now-playing UI on `trackError`/`trackStuck`, retry several distinct candidates, and destroy the player after bounded recovery attempts instead of leaving a silent session alive.
+**How to apply:** Set the recovery guard before awaiting cleanup, have `queueEnd`/autoplay recheck it after a short grace period, remove stale now-playing UI, retry distinct candidates, and bound recovery by both attempts and elapsed time instead of leaving a silent session alive.
 
 When a track error may be caused by a degraded Lavalink node, `client.riffy.migrate(player)` moves the active player to another connected node while preserving its voice state and queue.
 

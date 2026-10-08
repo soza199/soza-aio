@@ -479,6 +479,8 @@ module.exports = (client) => {
         client.riffy.on('trackStart', async (player, track) => {
             try {
                 player.__recoveringTrackError = false;
+                clearTimeout(player.__trackRecoveryTimeout);
+                player.__trackRecoveryTimeout = null;
                 clearTimeout(player.__trackRecoveryResetTimer);
                 player.__trackRecoveryResetTimer = setTimeout(() => {
                     if (player.playing) player.__trackRecoveryAttempts = 0;
@@ -2006,6 +2008,7 @@ module.exports = (client) => {
 
         client.riffy.on('playerDestroy', async (player) => {
             const guildId = player.guildId;
+            clearTimeout(player.__trackRecoveryTimeout);
             clearTimeout(player.__trackRecoveryResetTimer);
             await handlePlayerCleanup(client, guildId, player, 'Player destroyed');
         });
@@ -2053,6 +2056,20 @@ module.exports = (client) => {
             const guildId = player.guildId;
             const channel = client.channels.cache.get(player.textChannel);
 
+            if (player.__manualStop || player.__recoveringTrackError) return;
+            if (track && typeof track === 'object' && trackErrorRetries.has(track)) return;
+            if (track && typeof track === 'object') trackErrorRetries.add(track);
+            // Set this before any await so queueEnd cannot start autoplay while
+            // the failed source is being recovered.
+            player.__recoveringTrackError = true;
+            clearTimeout(player.__trackRecoveryTimeout);
+            player.__trackRecoveryTimeout = setTimeout(() => {
+                if (!player.__recoveringTrackError) return;
+                console.warn(`[V2 TRACK ERROR] Recovery timed out in guild ${guildId}`);
+                player.destroy();
+            }, 45000);
+            player.__trackRecoveryTimeout.unref?.();
+
             console.error(`V2 Track error in guild ${guildId}:`, {
                 message: errorMessage,
                 severity: exception.severity,
@@ -2065,6 +2082,26 @@ module.exports = (client) => {
             // rejected. Remove the stale "Active" panel immediately so it
             // does not claim that silent audio is still playing.
             await advancedMessageManager.cleanupGuildMessages(client, guildId, ['track']);
+
+            if ((player.__trackRecoveryAttempts || 0) >= 3) {
+                if (channel) {
+                    const exhaustedContainer = advancedMessageManager.createV2Container('error')
+                        .addTextDisplayComponents(
+                            textDisplay => textDisplay.setContent(
+                                `**❌ TRACK COULD NOT START**\n\nYouTube rejected **${trackInfo.title || 'this track'}** and the playback retries are exhausted.\n\n*Try a different version, live upload, or remix.*`
+                            )
+                        );
+                    const exhaustedMsg = await channel.send({
+                        components: [exhaustedContainer],
+                        flags: MessageFlags.IsComponentsV2
+                    });
+                    advancedMessageManager.addQuickDeleteMessage(client, exhaustedMsg, 'error');
+                }
+
+                player.destroy();
+                return;
+            }
+            player.__trackRecoveryAttempts = (player.__trackRecoveryAttempts || 0) + 1;
 
             // If another track is already queued, let the active player move
             // forward instead of creating another voice connection.
@@ -2087,13 +2124,11 @@ module.exports = (client) => {
 
                 setTimeout(async () => {
                     try {
-                        player.__recoveringTrackError = true;
                         await migratePlayerForRecovery(player, 'queued track error');
                         await player.play();
                     } catch (playError) {
                         console.error(`[V2 TRACK ERROR] Queue recovery failed in guild ${guildId}:`, playError);
-                    } finally {
-                        player.__recoveringTrackError = false;
+                        player.destroy();
                     }
                 }, 0);
                 return;
@@ -2104,20 +2139,11 @@ module.exports = (client) => {
             // audio format. Search for another result using the same player.
             if (
                 !track ||
-                typeof track !== 'object' ||
-                trackErrorRetries.has(track) ||
-                player.__recoveringTrackError ||
-                (player.__trackRecoveryAttempts || 0) >= 3
+                typeof track !== 'object'
             ) {
-                if ((player.__trackRecoveryAttempts || 0) >= 3) {
-                    player.destroy();
-                }
+                player.destroy();
                 return;
             }
-
-            trackErrorRetries.add(track);
-            player.__recoveringTrackError = true;
-            player.__trackRecoveryAttempts = (player.__trackRecoveryAttempts || 0) + 1;
 
             if (channel) {
                 const retryContainer = advancedMessageManager.createV2Container('warning')
@@ -2188,11 +2214,9 @@ module.exports = (client) => {
                         player.queue.unshift(candidate);
                     }
 
-                    player.__recoveringTrackError = false;
                     await player.play();
                 } catch (recoveryError) {
                     console.error(`[V2 TRACK ERROR] Alternative search failed in guild ${guildId}:`, recoveryError);
-                    player.__recoveringTrackError = false;
 
                     if (channel) {
                         const failContainer = advancedMessageManager.createV2Container('error')
