@@ -35,6 +35,8 @@ function validateEnvironment() {
         });
 
         console.log('\n[WAIT] Client ready, loading event handlers...\n');
+        await delay(2000);
+
         await loadEventHandlers(client);
 
         await delay(5000);
@@ -72,12 +74,16 @@ const loadEventHandlers = async (client) => {
     require('./events/instagramHandler')(client);
     log('Instagram Notifier loaded');
     
+    await delay(3000); 
+    
     try {
         require('./events/music')(client);
         log('Lavalink Music System loaded');
     } catch (error) {
         console.error('[ERROR] Failed to load music system:', error);
     }
+    
+    await delay(3000); 
     
     require('./handlers/distube')(client);
     log('Distube Music System loaded');
