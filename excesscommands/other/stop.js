@@ -35,6 +35,7 @@ module.exports = {
             }
 
             if (riffyPlayer) {
+                riffyPlayer.__manualStop = true;
                 riffyPlayer.destroy();
             }
 

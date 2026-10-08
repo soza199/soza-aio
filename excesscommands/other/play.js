@@ -1,6 +1,8 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getSpotifyTrackQueries, parseSpotifyUrl } = require('../../utils/spotifyTracks');
 const { maximizeVoiceChannelBitrate } = require('../../utils/voiceQuality');
+const { hasActiveDisTubeQueue } = require('../../utils/musicAudio');
+const { getRiffyQueuePosition } = require('../../utils/riffyPlayback');
 
 function temporaryReply(message, content, timeout = 6000) {
     return message.reply(content).then(reply => {
@@ -41,6 +43,7 @@ function destroyGuildPlayer(client, guildId) {
     if (!player) return;
 
     try {
+        player.__manualStop = true;
         player.destroy();
     } catch (error) {
         console.warn(`[RIFFY] Could not destroy stale player for ${guildId}:`, error.message);
@@ -178,45 +181,6 @@ module.exports = {
 
         const guildId = message.guild.id;
 
-        // Prefix `.play` is the simple YouTube playback path. Prefer the
-        // local yt-dlp-backed DisTube player here instead of sending every
-        // YouTube request through public Lavalink extractors, which can return
-        // a valid search result but reject the stream a few seconds later.
-        // Keep Spotify on the Riffy path because this command already supports
-        // Spotify collection expansion there.
-        if (
-            client.distube &&
-            typeof client.playMusic === 'function' &&
-            !parseSpotifyUrl(query)
-        ) {
-            return withGuildPlayLock(guildId, async () => {
-                destroyGuildPlayer(client, guildId);
-
-                try {
-                    await maximizeVoiceChannelBitrate(voiceChannel);
-                    await client.playMusic(voiceChannel, query, {
-                        member: message.member,
-                        textChannel: message.channel,
-                        timeout: 60000
-                    });
-
-                    const reply = await message.reply(`🎵 Added **${query}** to the music queue.`);
-                    setTimeout(() => reply.delete().catch(() => {}), 6000);
-                } catch (error) {
-                    console.error('[DISTUBE] Prefix music play error:', error);
-                    const queue = client.distube.getQueue?.(guildId);
-                    if (queue) {
-                        await client.distube.stop(guildId).catch(() => {});
-                    }
-
-                    return temporaryReply(
-                        message,
-                        '❌ Saya tidak bisa memutar lagu itu melalui YouTube. Coba URL atau judul lagu lain.'
-                    );
-                }
-            });
-        }
-
         return withGuildPlayLock(guildId, async () => {
         const parsedSpotify = parseSpotifyUrl(query);
         let spotifyRequest = parsedSpotify
@@ -260,6 +224,13 @@ module.exports = {
             const playAttempt = async (forceFresh, excludedNodes) => {
                 lastAttemptNode = null;
 
+                // Riffy is the only player used by prefix `.play`. Stop any
+                // legacy DisTube session so it cannot own the guild voice
+                // connection at the same time.
+                if (hasActiveDisTubeQueue(client, guildId)) {
+                    await client.distube.stop(guildId);
+                }
+
                 if (forceFresh) {
                     destroyGuildPlayer(client, guildId);
                 }
@@ -279,6 +250,7 @@ module.exports = {
                 const tracks = [];
                 let lastTrackError = null;
                 let startedPlayback = false;
+                let firstQueuePosition = null;
                 const addTrackAndStart = async (track) => {
                     track.requester = {
                         id: message.author.id,
@@ -286,6 +258,9 @@ module.exports = {
                         avatarURL: message.author.displayAvatarURL()
                     };
                     if (track.info) track.info.requester = message.author;
+                    if (firstQueuePosition === null) {
+                        firstQueuePosition = getRiffyQueuePosition(player);
+                    }
                     tracks.push(track);
                     player.queue.add(track);
 
@@ -318,7 +293,7 @@ module.exports = {
                             for (const track of collectionResult.tracks) {
                                 await addTrackAndStart(track);
                             }
-                            return { player, track: tracks[0], tracks };
+                            return { player, track: tracks[0], tracks, firstQueuePosition };
                         }
                     } catch (error) {
                         console.warn('[RIFFY] Native Spotify collection load failed; using track fallback:', error.message);
@@ -340,7 +315,7 @@ module.exports = {
                 if (!tracks.length && lastTrackError) throw lastTrackError;
                 if (!tracks.length) return { player, track: null, tracks };
 
-                return { player, track: tracks[0], tracks };
+                return { player, track: tracks[0], tracks, firstQueuePosition };
             };
 
             try {
@@ -382,18 +357,23 @@ module.exports = {
                     return temporaryReply(message, `❌ No tracks found for **${query}**.`);
                 }
 
-                const position = result.player.queue.length;
+                const position = result.firstQueuePosition ?? 0;
                 const addedCount = result.tracks?.length || 1;
                 const collectionLabel = spotifyRequest?.type === 'album' ? 'album' : 'playlist';
                 const partialWarning = spotifyRequest?.partial
                     ? '\n⚠️ Metadata publik Spotify hanya mengembalikan sebagian lagu. Tambahkan SPOTIFY_CLIENT_ID dan SPOTIFY_CLIENT_SECRET agar seluruh isi dimuat.'
                     : '';
-                const reply = await message.reply(
-                    spotifyRequest
-                        ? `🎵 Spotify ${collectionLabel} **${spotifyRequest.name}** ditambahkan ke queue.\n✅ **${addedCount}** lagu berhasil ditambahkan.\n📍 Queue sekarang: **${position}** lagu${partialWarning}`
-                        : `🎵 Added **${result.track.info.title}** to the queue.\n📍 Position: **#${position}**`
-                );
-                setTimeout(() => reply.delete().catch(() => {}), 6000);
+                const confirmation = spotifyRequest
+                    ? `🎵 Spotify ${collectionLabel} **${spotifyRequest.name}** ditambahkan ke queue.\n✅ **${addedCount}** lagu berhasil ditambahkan.\n📍 Lagu pertama mulai di posisi: **#${position}**${partialWarning}`
+                    : `🎵 Added **${result.track.info.title}** to the queue.\n📍 Position: **#${position}**`;
+                try {
+                    const reply = await message.reply(confirmation);
+                    setTimeout(() => reply.delete().catch(() => {}), 6000);
+                } catch (replyError) {
+                    // A Discord reply failure must not be reported as a
+                    // playback failure or destroy a song that already started.
+                    console.warn('[RIFFY] Playback started, but the queue confirmation could not be sent:', replyError.message);
+                }
             } catch (error) {
                 console.error('Prefix music play error:', error);
                 destroyGuildPlayer(client, guildId);
