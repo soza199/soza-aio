@@ -479,7 +479,11 @@ module.exports = (client) => {
         client.riffy.on('trackStart', async (player, track) => {
             try {
                 player.__recoveringTrackError = false;
-                player.__trackRecoveryAttempts = 0;
+                clearTimeout(player.__trackRecoveryResetTimer);
+                player.__trackRecoveryResetTimer = setTimeout(() => {
+                    if (player.playing) player.__trackRecoveryAttempts = 0;
+                    player.__trackRecoveryResetTimer = null;
+                }, 15000);
                 const channel = client.channels.cache.get(player.textChannel);
                 const guildId = player.guildId;
 
@@ -724,8 +728,19 @@ module.exports = (client) => {
         client.riffy.on("queueEnd", async (player) => {
             try {
                 // A failed YouTube stream may temporarily leave the queue empty
-                // while trackError searches for a playable alternative.
-                if (player.__recoveringTrackError || player.__autoplayInProgress) return;
+                // before trackError arrives. Delay queue-end actions briefly so
+                // the failure-recovery handler can claim the session first.
+                const queueEndAttempt = (player.__queueEndAttempt || 0) + 1;
+                player.__queueEndAttempt = queueEndAttempt;
+                await new Promise(resolve => setTimeout(resolve, 750));
+                if (
+                    player.__queueEndAttempt !== queueEndAttempt ||
+                    player.__recoveringTrackError ||
+                    player.__autoplayInProgress ||
+                    player.__manualStop ||
+                    player.queue.length > 0 ||
+                    player.playing
+                ) return;
 
                 const channel = client.channels.cache.get(player.textChannel);
                 const guildId = player.guildId;
@@ -1991,6 +2006,7 @@ module.exports = (client) => {
 
         client.riffy.on('playerDestroy', async (player) => {
             const guildId = player.guildId;
+            clearTimeout(player.__trackRecoveryResetTimer);
             await handlePlayerCleanup(client, guildId, player, 'Player destroyed');
         });
 

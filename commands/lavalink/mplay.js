@@ -25,6 +25,10 @@ const {
     setStablePlayerVolume,
     hasActiveDisTubeQueue
 } = require('../../utils/musicAudio');
+const {
+    getRiffyQueuePosition,
+    startRiffyPlayerIfIdle
+} = require('../../utils/riffyPlayback');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -344,6 +348,7 @@ module.exports = {
                                 }
                         
                                 let added = 0;
+                                let startedPlayback = false;
                                 for (const trackQuery of trackList) {
                                     const result = await client.riffy.resolve({ query: trackQuery, requester: user });
                                     if (result && result.tracks && result.tracks.length > 0) {
@@ -355,6 +360,14 @@ module.exports = {
                                         };
                                         player.queue.add(resolvedTrack);
                                         added++;
+
+                                        // Start the first resolved track before
+                                        // spending time resolving the rest of a
+                                        // Spotify collection.
+                                        if (!startedPlayback) {
+                                            startedPlayback = true;
+                                            await startRiffyPlayerIfIdle(player);
+                                        }
                                     }
                                 }
                         
@@ -386,7 +399,6 @@ module.exports = {
                                 });
                                 setTimeout(() => reply.delete().catch(() => {}), 8000);
                         
-                                if (!player.playing && !player.paused) player.play();
                             } catch (spotifyError) {
                                 console.error('Spotify error:', spotifyError);
                                 
@@ -457,6 +469,8 @@ module.exports = {
                                     };
                                     player.queue.add(track);
                                 }
+
+                                await startRiffyPlayerIfIdle(player);
                     
                                 const playlistContainer = new ContainerBuilder()
                                     .setAccentColor(0xdc92ff)
@@ -483,12 +497,14 @@ module.exports = {
                                 setTimeout(() => reply.delete().catch(() => {}), 6000);
                             } else {
                                 const track = resolve.tracks[0];
+                                const queuePosition = getRiffyQueuePosition(player);
                                 track.requester = {
                                     id: user.id,
                                     username: user.username,
                                     avatarURL: user.displayAvatarURL()
                                 };
                                 player.queue.add(track);
+                                await startRiffyPlayerIfIdle(player);
                     
                                 const trackContainer = new ContainerBuilder()
                                     .setAccentColor(0xdc92ff)
@@ -499,7 +515,7 @@ module.exports = {
                                     .addSectionComponents(
                                         section => section
                                             .addTextDisplayComponents(
-                                                textDisplay => textDisplay.setContent(`**${track.info.title}**\n\nSuccessfully added to queue!\n\n**Details:**\n• Duration: ${this.formatDuration(track.info.length)}\n• Position: #${player.queue.length}\n• Source: YouTube`)
+                                                textDisplay => textDisplay.setContent(`**${track.info.title}**\n\nSuccessfully added to queue!\n\n**Details:**\n• Duration: ${this.formatDuration(track.info.length)}\n• Position: #${queuePosition}\n• Source: YouTube`)
                                             )
                                             .setThumbnailAccessory(
                                                 thumbnail => thumbnail
@@ -515,7 +531,6 @@ module.exports = {
                                 setTimeout(() => reply.delete().catch(() => {}), 6000);
                             }
                     
-                            if (!player.playing && !player.paused) player.play();
                         }
                   
                         else {
@@ -537,12 +552,14 @@ module.exports = {
                             }
                 
                             const track = resolve.tracks[0];
+                            const queuePosition = getRiffyQueuePosition(player);
                             track.requester = {
                                 id: user.id,
                                 username: user.username,
                                 avatarURL: user.displayAvatarURL()
                             };
                             player.queue.add(track);
+                            await startRiffyPlayerIfIdle(player);
                 
                             const searchContainer = new ContainerBuilder()
                                 .setAccentColor(0xdc92ff)
@@ -553,7 +570,7 @@ module.exports = {
                                 .addSectionComponents(
                                     section => section
                                         .addTextDisplayComponents(
-                                            textDisplay => textDisplay.setContent(`**${track.info.title}**\n\nTrack found and added to queue!\n\n**Queue Info:**\n• Position: #${player.queue.length}\n• Duration: ${this.formatDuration(track.info.length)}\n• Quality: High Definition`)
+                                                textDisplay => textDisplay.setContent(`**${track.info.title}**\n\nTrack found and added to queue!\n\n**Queue Info:**\n• Position: #${queuePosition}\n• Duration: ${this.formatDuration(track.info.length)}\n• Quality: High Definition`)
                                         )
                                         .setThumbnailAccessory(
                                             thumbnail => thumbnail
@@ -568,7 +585,6 @@ module.exports = {
                             });
                             setTimeout(() => reply.delete().catch(() => {}), 6000);
                 
-                            if (!player.playing && !player.paused) player.play();
                         }
                     } catch (error) {
                         console.error('Error resolving query:', error);
@@ -1075,6 +1091,7 @@ module.exports = {
                     
                         let addedTracks = 0;
                         let failedTracks = 0;
+                        let startedPlayback = false;
                         
                         for (const song of playlist.songs) {
                             try {
@@ -1089,6 +1106,11 @@ module.exports = {
                                     };
                                     player.queue.add(track);
                                     addedTracks++;
+
+                                    if (!startedPlayback) {
+                                        startedPlayback = true;
+                                        await startRiffyPlayerIfIdle(player);
+                                    }
                                 } else {
                                     failedTracks++;
                                 }
@@ -1137,10 +1159,6 @@ module.exports = {
                             flags: MessageFlags.IsComponentsV2 
                         });
                         setTimeout(() => reply.delete().catch(() => {}), 12000);
-                        
-                        if (!player.playing && !player.paused) {
-                            player.play();
-                        }
                     } catch (error) {
                         console.error('Error playing playlist:', error);
                         

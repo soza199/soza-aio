@@ -132,7 +132,7 @@ module.exports = async (client) => {
                         url: 'https://discord.gg/xQF9f9yUEM',
                         icon_url: musicIcons.playerIcon
                     },
-                    description: `- Song name: **${song.name}** \n- Duration: **${song.formattedDuration}**\n- Requested by: ${song.user}`,
+                    description: `- Song name: **${song.name}** \n- Duration: **${song.formattedDuration}**\n- Queue position: **#0 — now playing**\n- Requested by: ${song.user}`,
                     image: {
                         url: 'attachment://musicCard.png'
                     },
@@ -179,6 +179,8 @@ module.exports = async (client) => {
         
         if (queue.textChannel) {
             try {
+                const songIndex = queue.songs?.findIndex(queuedSong => queuedSong === song) ?? -1;
+                const queuePosition = Math.max(1, songIndex);
                 const embed = new EmbedBuilder()
                     .setColor(0xDC92FF)
                     .setAuthor({ 
@@ -186,7 +188,7 @@ module.exports = async (client) => {
                         iconURL: musicIcons.correctIcon, 
                         url: 'https://discord.gg/xQF9f9yUEM' 
                     })
-                    .setDescription(`**${song.name}**\n- Duration: **${song.formattedDuration}**\n- Added by: ${song.user}`)
+                    .setDescription(`**${song.name}**\n- Duration: **${song.formattedDuration}**\n- Queue position: **#${queuePosition}**\n- Added by: ${song.user}`)
                     .setThumbnail(song.thumbnail)
                     .setFooter({ text: 'Distube Player', iconURL: musicIcons.footerIcon })
                     .setTimestamp();

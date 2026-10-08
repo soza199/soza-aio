@@ -11,6 +11,7 @@ const stickyTimers = new Map();
 const AutoResponderModel = require('../models/autoresponses/schema');
 const ServerConfig = require('../models/serverConfig/schema');
 const { handleFaqMessage } = require('../handlers/faqHandler');
+const { handlePrefixMusic } = require('../utils/prefixMusic');
 
 
 const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
@@ -263,6 +264,9 @@ module.exports = {
                 return;
             }
 
+            if (await handlePrefixMusic(message, client, commandName, args)) {
+                return;
+            }
 
             const command = client.commands.get(commandName);
             if (command) {
