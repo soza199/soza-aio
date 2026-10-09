@@ -1,6 +1,6 @@
 const { Client, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { VoiceChannelModel, TemporaryChannelModel, CentralizedControlModel } = require('../models/autoVoice/schema');
-const setupBanners = require('../UI/banners/SetupBanners');
+const tempVoiceControls = require('../utils/autoVoiceControls');
 let config = {};
 
 async function loadConfig() {
@@ -37,17 +37,35 @@ function setupIntervals(client) {
       for (const channel of outdatedChannels) {
         const guild = client.guilds.cache.get(channel.guildId);
         if (!guild) continue;
-
-        const channelObj = guild.channels.cache.get(channel.channelId);
-        if (channelObj) {
-          await channelObj.delete();
-        }
-        await TemporaryChannelModel.deleteOne({ channelId: channel.channelId });
+        await cleanupTemporaryRoom(channel, guild);
       }
     } catch (error) {
       console.error('Error during cleanup:', error);
     }
-  }, 5000);
+  }, 60 * 1000);
+}
+
+async function cleanupTemporaryRoom(record, guild) {
+  const channel = guild.channels.cache.get(record.channelId);
+  const waitingChannel = record.waitingRoomChannelId
+    ? guild.channels.cache.get(record.waitingRoomChannelId)
+    : null;
+  const mainRoomEmpty = !channel || channel.members.size === 0;
+  const waitingRoomEmpty = !waitingChannel || waitingChannel.members.size === 0;
+
+  if (mainRoomEmpty && waitingRoomEmpty) {
+    if (waitingChannel) await waitingChannel.delete('TempVoice room is empty');
+    if (channel) await channel.delete('TempVoice room is empty');
+    await TemporaryChannelModel.deleteOne({ channelId: record.channelId });
+    return true;
+  }
+
+  if (!record.waitingRoomEnabled && waitingChannel && waitingRoomEmpty) {
+    await waitingChannel.delete('TempVoice waiting room is disabled and empty');
+    record.waitingRoomChannelId = null;
+    await record.save();
+  }
+  return false;
 }
 
 const deleteChannelAfterTimeout = (client, channelId, timeout) => {
@@ -57,12 +75,7 @@ const deleteChannelAfterTimeout = (client, channelId, timeout) => {
       if (channelData) {
         const guild = client.guilds.cache.get(channelData.guildId);
         if (!guild) return;
-
-        const channel = guild.channels.cache.get(channelId);
-        if (channel) {
-          await channel.delete();
-          await TemporaryChannelModel.deleteOne({ channelId });
-        }
+        await cleanupTemporaryRoom(channelData, guild);
       }
     } catch (error) {
       console.error('Error deleting channel:', error);
@@ -86,104 +99,17 @@ const sendOrUpdateCentralizedEmbed = async (client, guild) => {
     const existingControl = await CentralizedControlModel.findOne({ guildId: guild.id });
     
 
-    const embed = new EmbedBuilder()
-      .setAuthor({
-        name: "Dynamic Voice Channel Manager",
-        iconURL: "https://cdn.discordapp.com/emojis/1092879273712435262.gif",
-        url: "https://discord.gg/"
-      })
-      .setDescription('**Create and manage your own voice channels!**\n\nJoin the creation channel to get started. Use these controls to customize your experience.')
-      .setColor('#5865F2') 
-      .addFields([
-        {
-          name: '🔒 Privacy Controls',
-          value: `> \`🔒\` Lock channel - Prevent others from joining\n> \`🔓\` Unlock channel - Allow others to join\n> \`👻\` Hide channel - Make it invisible to others\n> \`👁️\` Show channel - Make it visible to everyone`
-        },
-        {
-          name: '⚙️ Channel Settings',
-          value: `> \`✏️\` Rename - Change channel name/description\n> \`👑\` Transfer - Give ownership to another user\n> \`🧢\` User Limit - Adjust maximum capacity\n> \`🔊\` Bitrate - Adjust audio quality`
-        },
-        {
-          name: '🛠️ Moderation Tools',
-          value: `> \`🚫\` Disconnect - Remove users from your channel\n> \`ℹ️\` Info - View detailed channel statistics\n> \`🌎\` Region - Change voice server location`
-        }
-      ])
-      .setImage(setupBanners.autovcBanner)
-      .setFooter({ text: 'Your voice channel will automatically delete after 6 hours of inactivity' })
-      .setTimestamp();
-
-    
-    const row1 = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId('voice_control_lock_channel')
-          .setEmoji('🔒')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('voice_control_unlock_channel')
-          .setEmoji('🔓')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('voice_control_ghost_channel')
-          .setEmoji('👻')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('voice_control_reveal_channel')
-          .setEmoji('👁️')
-          .setStyle(ButtonStyle.Primary)
-      );
-
-   
-    const row2 = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId('voice_control_edit_channel')
-          .setEmoji('✏️')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('voice_control_increase_limit')
-          .setEmoji('➕')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('voice_control_decrease_limit')
-          .setEmoji('➖')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('voice_control_view_channel_info')
-          .setEmoji('ℹ️')
-          .setStyle(ButtonStyle.Success)
-      );
-
-  
-    const row3 = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId('voice_control_disconnect_member')
-          .setEmoji('🚫')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId('voice_control_change_bitrate')
-          .setEmoji('🔊')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId('voice_control_change_region')
-          .setEmoji('🌏')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId('voice_control_transfer_ownership')
-          .setEmoji('👑')
-          .setStyle(ButtonStyle.Secondary)
-      );
+    const { embed, components } = tempVoiceControls.buildTempVoicePanel(client);
 
     if (existingControl) {
       try {
         const message = await managerChannel.messages.fetch(existingControl.messageId);
 
         if (message.author.id === client.user.id) {
-          await message.edit({ embeds: [embed], components: [row1, row2, row3] });
+          await message.edit({ embeds: [embed], components });
         } else {
           await message.delete();
-          const newMessage = await managerChannel.send({ embeds: [embed], components: [row1, row2, row3] });
+          const newMessage = await managerChannel.send({ embeds: [embed], components });
           await CentralizedControlModel.updateOne(
             { guildId: guild.id },
             { $set: { messageId: newMessage.id } }
@@ -193,7 +119,7 @@ const sendOrUpdateCentralizedEmbed = async (client, guild) => {
         if (fetchError.code === 10008) {
           console.error(`Message not found for guild ${guild.id}. Removing outdated record.`);
           await CentralizedControlModel.deleteOne({ guildId: guild.id });
-          const newMessage = await managerChannel.send({ embeds: [embed], components: [row1, row2, row3] });
+          const newMessage = await managerChannel.send({ embeds: [embed], components });
           await CentralizedControlModel.create({
             guildId: guild.id,
             messageId: newMessage.id,
@@ -203,7 +129,7 @@ const sendOrUpdateCentralizedEmbed = async (client, guild) => {
         }
       }
     } else {
-      const newMessage = await managerChannel.send({ embeds: [embed], components: [row1, row2, row3] });
+      const newMessage = await managerChannel.send({ embeds: [embed], components });
       await CentralizedControlModel.create({
         guildId: guild.id,
         messageId: newMessage.id,
@@ -248,17 +174,21 @@ const checkOutdatedCentralizedControls = async (client) => {
 };
 
 const handleVoiceStateUpdate = async (client, oldState, newState) => {
-  if (newState.member.user.bot) return;
-  if (oldState.channelId && !newState.channelId) {
-    const oldChannel = oldState.channel;
-    const voiceChannel = await TemporaryChannelModel.findOne({ channelId: oldChannel.id, isTemporary: true });
+  if (!newState.member?.user || newState.member.user.bot) return;
 
-    if (voiceChannel && oldChannel.members.size === 0) {
+  if (oldState.channelId && oldState.channelId !== newState.channelId) {
+    const departingRoom = await TemporaryChannelModel.findOne({
+      isTemporary: true,
+      $or: [
+        { channelId: oldState.channelId },
+        { waitingRoomChannelId: oldState.channelId }
+      ]
+    });
+    if (departingRoom && newState.channelId !== departingRoom.waitingRoomChannelId) {
       try {
-        await oldChannel.delete();
-        await TemporaryChannelModel.deleteOne({ channelId: oldChannel.id });
+        await cleanupTemporaryRoom(departingRoom, oldState.guild);
       } catch (error) {
-        console.error(`Error deleting channel or record for channel ${oldChannel.id}:`, error);
+        console.error(`Error cleaning up TempVoice room ${departingRoom.channelId}:`, error);
       }
     }
   }
@@ -268,11 +198,39 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
 
   
   const guildId = newState.guild.id;
-  const settings = config.voiceChannelSetup[guildId];
+  const member = newState.member;
+
+  if (newState.channelId) {
+    const joinedTemporaryRoom = await TemporaryChannelModel.findOne({
+      channelId: newState.channelId,
+      isTemporary: true,
+      waitingRoomEnabled: true
+    });
+    const trustedIds = Array.isArray(joinedTemporaryRoom?.trustedUserIds)
+      ? joinedTemporaryRoom.trustedUserIds
+      : [];
+    if (joinedTemporaryRoom &&
+        joinedTemporaryRoom.userId !== member.id &&
+        !trustedIds.includes(member.id) &&
+        joinedTemporaryRoom.waitingRoomChannelId) {
+      const waitingRoom = newState.guild.channels.cache.get(joinedTemporaryRoom.waitingRoomChannelId);
+      if (waitingRoom) {
+        try {
+          await member.voice.setChannel(waitingRoom, 'TempVoice waiting room approval');
+          await member.send(`You are waiting for approval to join <#${joinedTemporaryRoom.channelId}>.`).catch(() => {});
+        } catch (error) {
+          console.error(`Could not move ${member.id} to the TempVoice waiting room:`, error);
+          await member.voice.disconnect('Could not enter the TempVoice waiting room').catch(() => {});
+        }
+        return;
+      }
+    }
+  }
+
+  const settings = config.voiceChannelSetup?.[guildId];
   if (!settings || !settings.status) return;
 
   const { voiceChannelId, allowedRoleIds } = settings;
-  const member = newState.member;
 
   if (newState.channelId === voiceChannelId) {
  
@@ -298,16 +256,23 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
       }
     }
 
+    let createdChannel;
     try {
 
-      const newChannel = await newState.guild.channels.create({
+      createdChannel = await newState.guild.channels.create({
         name: `${member.user.username}'s channel`,
         type: ChannelType.GuildVoice,
         parent: newState.channel.parentId,
         permissionOverwrites: [
           {
             id: member.user.id,
-            allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak]
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.ManageChannels,
+              PermissionsBitField.Flags.Connect,
+              PermissionsBitField.Flags.Speak,
+              PermissionsBitField.Flags.MoveMembers
+            ]
           },
           {
             id: newState.guild.roles.everyone,
@@ -316,12 +281,8 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
         ]
       });
 
-      
-      await member.voice.setChannel(newChannel);
-
-   
       await TemporaryChannelModel.create({
-        channelId: newChannel.id,
+        channelId: createdChannel.id,
         guildId,
         userId: member.user.id,
         createdAt: new Date(),
@@ -330,9 +291,13 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
         description: ''
       });
 
-     
-      deleteChannelAfterTimeout(client, newChannel.id, 6 * 60 * 60 * 1000);
+      await member.voice.setChannel(createdChannel);
+      deleteChannelAfterTimeout(client, createdChannel.id, 6 * 60 * 60 * 1000);
     } catch (error) {
+      if (createdChannel) {
+        await TemporaryChannelModel.deleteOne({ channelId: createdChannel.id }).catch(() => {});
+        await createdChannel.delete('TempVoice creation could not finish').catch(() => {});
+      }
       console.error('Error creating voice channel:', error);
     }
   }
@@ -746,6 +711,7 @@ module.exports = (client) => {
   client.on('voiceStateUpdate', (oldState, newState) => handleVoiceStateUpdate(client, oldState, newState));
 
   client.on('interactionCreate', async (interaction) => {
+    if (await tempVoiceControls.handle(interaction)) return;
     if (interaction.isButton()) {
       await handleButtonInteraction(interaction);
     } else if (interaction.isModalSubmit()) {

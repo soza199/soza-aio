@@ -16,7 +16,13 @@ const TemporaryChannelSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   isTemporary: { type: Boolean, default: true },
   name: { type: String, default: 'Voice Channel' },
-  description: { type: String, default: '' }
+  description: { type: String, default: '' },
+  isPrivate: { type: Boolean, default: false },
+  waitingRoomEnabled: { type: Boolean, default: false },
+  waitingRoomChannelId: { type: String, default: null },
+  chatEnabled: { type: Boolean, default: true },
+  trustedUserIds: { type: [String], default: [] },
+  blockedUserIds: { type: [String], default: [] }
 });
 
 const CentralizedControlSchema = new mongoose.Schema({
