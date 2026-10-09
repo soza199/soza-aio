@@ -31,7 +31,7 @@ const {
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { hasActiveRiffyPlayer, hasActiveDisTubeQueue } = require('../../utils/musicAudio');
+const { hasActiveRiffyPlayer } = require('../../utils/musicAudio');
 
 const activeSessions = new Map();
 const messageQueue = new Map();
@@ -92,10 +92,7 @@ module.exports = {
             return this.sendError(interaction, 'I need permissions to join and speak in your voice channel!');
         }
 
-        if (
-            hasActiveRiffyPlayer(interaction.client, guildId) ||
-            hasActiveDisTubeQueue(interaction.client, guildId)
-        ) {
+        if (hasActiveRiffyPlayer(interaction.client, guildId)) {
             return this.sendError(interaction, 'Music is already playing in this server. Stop it before starting TTS Live.');
         }
 

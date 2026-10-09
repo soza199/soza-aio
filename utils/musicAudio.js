@@ -19,14 +19,8 @@ function hasActiveRiffyPlayer(client, guildId) {
     return Boolean(player && (player.current || player.playing || player.paused));
 }
 
-function hasActiveDisTubeQueue(client, guildId) {
-    const queue = client?.distube?.getQueue?.(guildId);
-    return Boolean(queue && queue.songs?.length);
-}
-
 module.exports = {
     getDefaultMusicVolume,
     setStablePlayerVolume,
-    hasActiveRiffyPlayer,
-    hasActiveDisTubeQueue
+    hasActiveRiffyPlayer
 };

@@ -21,10 +21,7 @@ const { autoplayCollection } = require('../../mongodb');
 const { playlistCollection } = require('../../mongodb');
 const { getSpotifyTrackQueries, parseSpotifyUrl } = require('../../utils/spotifyTracks');
 const { maximizeVoiceChannelBitrate } = require('../../utils/voiceQuality');
-const {
-    setStablePlayerVolume,
-    hasActiveDisTubeQueue
-} = require('../../utils/musicAudio');
+const { setStablePlayerVolume } = require('../../utils/musicAudio');
 const {
     getRiffyQueuePosition,
     startRiffyPlayerIfIdle
@@ -250,13 +247,6 @@ module.exports = {
                 
                 if (!player) {
                     try {
-                        // Riffy must own the guild's only voice session. A
-                        // legacy DisTube queue can otherwise cause doubled or
-                        // unstable playback.
-                        if (hasActiveDisTubeQueue(client, guildId)) {
-                            await client.distube.stop(guildId);
-                        }
-
                         player = await client.riffy.createConnection({
                             guildId,
                             voiceChannel: channel.id,

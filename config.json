@@ -15,7 +15,6 @@
         "core" :true,
         "lavalink": true,
         "fun": true,
-        "distube": true,
         "setups": true,
         "audio": true
     }

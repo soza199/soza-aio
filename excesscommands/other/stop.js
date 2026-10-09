@@ -18,13 +18,12 @@ module.exports = {
         }
 
         const riffyPlayer = client.riffy?.players?.get(message.guild.id);
-        const distubeQueue = client.distube?.getQueue?.(message.guild.id);
 
-        if (!riffyPlayer && !distubeQueue) {
-            return temporaryReply(message, '❌ The music system is not ready yet. Please try again shortly.');
+        if (!riffyPlayer) {
+            return temporaryReply(message, '❌ There is no Riffy music session to stop.');
         }
 
-        const queueLength = riffyPlayer?.queue?.length || distubeQueue?.songs?.length || 0;
+        const queueLength = (riffyPlayer.queue?.length || 0) + (riffyPlayer.current ? 1 : 0);
 
         try {
             if (riffyPlayer && client.musicMessageManager) {
@@ -37,10 +36,6 @@ module.exports = {
             if (riffyPlayer) {
                 riffyPlayer.__manualStop = true;
                 riffyPlayer.destroy();
-            }
-
-            if (distubeQueue) {
-                await client.distube.stop(message.guild.id);
             }
 
             return temporaryReply(

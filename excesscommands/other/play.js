@@ -1,7 +1,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getSpotifyTrackQueries, parseSpotifyUrl } = require('../../utils/spotifyTracks');
 const { maximizeVoiceChannelBitrate } = require('../../utils/voiceQuality');
-const { hasActiveDisTubeQueue } = require('../../utils/musicAudio');
 const { getRiffyQueuePosition } = require('../../utils/riffyPlayback');
 
 function temporaryReply(message, content, timeout = 6000) {
@@ -223,13 +222,6 @@ module.exports = {
             let lastAttemptNode = null;
             const playAttempt = async (forceFresh, excludedNodes) => {
                 lastAttemptNode = null;
-
-                // Riffy is the only player used by prefix `.play`. Stop any
-                // legacy DisTube session so it cannot own the guild voice
-                // connection at the same time.
-                if (hasActiveDisTubeQueue(client, guildId)) {
-                    await client.distube.stop(guildId);
-                }
 
                 if (forceFresh) {
                     destroyGuildPlayer(client, guildId);

@@ -21,11 +21,11 @@ When a track error may be caused by a degraded Lavalink node, `client.riffy.migr
 
 **How to apply:** Before retrying a failed track, migrate only when another connected node exists, then resolve replacement tracks against `player.node`.
 
-Prefix `.play` playback must use Riffy, not DisTube; stop any legacy DisTube queue only to release the guild's voice session.
+All music playback in this project uses Riffy; do not keep or restore DisTube playback paths or dependencies.
 
-**Why:** The user explicitly requested that prefix song playback not use DisTube, and separate prefix message listeners caused concurrent playback attempts.
+**Why:** The user requested complete DisTube removal to prevent playback-engine conflicts.
 
-**How to apply:** Keep one active prefix `.play` dispatcher and route search, YouTube links, and Spotify metadata through Riffy; do not invoke DisTube's `play()` from this path.
+**How to apply:** Route prefix and slash music through Riffy, keep a single owner for each guild's voice session, and remove obsolete DisTube command, event, and package references.
 
 Riffy's finite reconnect loop can leave a disconnected node in `nodeMap` after retries are exhausted, so recovery must reset/reconnect that node or recreate it from configuration.
 

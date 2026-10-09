@@ -36,7 +36,7 @@ const {
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { hasActiveRiffyPlayer, hasActiveDisTubeQueue } = require('../../utils/musicAudio');
+const { hasActiveRiffyPlayer } = require('../../utils/musicAudio');
 
 
 const SOUNDS = {
@@ -159,10 +159,7 @@ module.exports = {
         }
 
         try {
-            if (
-                hasActiveRiffyPlayer(interaction.client, interaction.guild.id) ||
-                hasActiveDisTubeQueue(interaction.client, interaction.guild.id)
-            ) {
+            if (hasActiveRiffyPlayer(interaction.client, interaction.guild.id)) {
                 return this.sendError(interaction, 'Music is already playing in this server. Stop it before playing a sound effect.');
             }
            

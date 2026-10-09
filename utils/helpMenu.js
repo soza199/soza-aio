@@ -34,7 +34,6 @@ const CATEGORY_META = {
     funeconomy: { label: 'Fun Economy',           emoji: '💰' },
     media:      { label: 'Media',                 emoji: '🖼️' },
     audio:      { label: 'Audio',                 emoji: '🔊' },
-    distube:    { label: 'Music (DisTube)',       emoji: '🎵' },
     lavalink:   { label: 'Music (Lavalink)',      emoji: '🎶' },
     other:      { label: 'Prefix Commands',       emoji: '📦' },
 };

@@ -83,10 +83,5 @@ const loadEventHandlers = async (client) => {
         console.error('[ERROR] Failed to load music system:', error);
     }
     
-    await delay(3000); 
-    
-    require('./handlers/distube')(client);
-    log('Distube Music System loaded');
-    
     console.log(`\n[STATUS] All systems initialized successfully at ${new Date().toLocaleTimeString()}\n`);
 };
