@@ -108,8 +108,8 @@ async function buildTempVoicePanel(client) {
   const emojis = await fetchApplicationEmojis(client);
   const embed = new EmbedBuilder()
     .setColor('#222222')
+    .setTittle('## TempVoice Interface')
     .setDescription([
-      '## TempVoice Interface'
       'This **interface** can be used to manage temporary voice channels.',
     ].join('\n'))
     .setImage(`attachment://${BUTTON_GUIDE_NAME}`)
