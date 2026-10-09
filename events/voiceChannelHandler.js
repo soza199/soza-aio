@@ -99,17 +99,17 @@ const sendOrUpdateCentralizedEmbed = async (client, guild) => {
     const existingControl = await CentralizedControlModel.findOne({ guildId: guild.id });
     
 
-    const { embed, components } = tempVoiceControls.buildTempVoicePanel(client);
+    const { embed, components, files } = await tempVoiceControls.buildTempVoicePanel(client);
 
     if (existingControl) {
       try {
         const message = await managerChannel.messages.fetch(existingControl.messageId);
 
         if (message.author.id === client.user.id) {
-          await message.edit({ embeds: [embed], components });
+          await message.edit({ embeds: [embed], components, files });
         } else {
           await message.delete();
-          const newMessage = await managerChannel.send({ embeds: [embed], components });
+          const newMessage = await managerChannel.send({ embeds: [embed], components, files });
           await CentralizedControlModel.updateOne(
             { guildId: guild.id },
             { $set: { messageId: newMessage.id } }
@@ -119,7 +119,7 @@ const sendOrUpdateCentralizedEmbed = async (client, guild) => {
         if (fetchError.code === 10008) {
           console.error(`Message not found for guild ${guild.id}. Removing outdated record.`);
           await CentralizedControlModel.deleteOne({ guildId: guild.id });
-          const newMessage = await managerChannel.send({ embeds: [embed], components });
+          const newMessage = await managerChannel.send({ embeds: [embed], components, files });
           await CentralizedControlModel.create({
             guildId: guild.id,
             messageId: newMessage.id,
@@ -129,7 +129,7 @@ const sendOrUpdateCentralizedEmbed = async (client, guild) => {
         }
       }
     } else {
-      const newMessage = await managerChannel.send({ embeds: [embed], components });
+      const newMessage = await managerChannel.send({ embeds: [embed], components, files });
       await CentralizedControlModel.create({
         guildId: guild.id,
         messageId: newMessage.id,

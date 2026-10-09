@@ -1,5 +1,6 @@
 const {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
@@ -11,38 +12,100 @@ const {
   TextInputStyle,
   UserSelectMenuBuilder
 } = require('discord.js');
+const path = require('node:path');
 const { TemporaryChannelModel } = require('../models/autoVoice/schema');
 
 const Flags = PermissionsBitField.Flags;
 const BUTTON_PREFIX = 'tempvoice_btn_';
 const SELECT_PREFIX = 'tempvoice_select_';
 const MODAL_PREFIX = 'tempvoice_modal_';
+const BUTTON_GUIDE_NAME = 'tempvoice-button-guide.png';
+const BUTTON_GUIDE_PATH = path.join(__dirname, '..', 'attached_assets', 'canvas_1791526122911.png');
 
 const buttonRows = [
   [
-    ['name', '📝'],
-    ['limit', '👥'],
-    ['privacy', '🛡️'],
-    ['waiting_room', '⏳'],
-    ['chat', '💬']
+    'name',
+    'limit',
+    'privacy',
+    'waiting_room',
+    'chat'
   ],
   [
-    ['trust', '✅'],
-    ['untrust', '❌'],
-    ['invite', '🔗'],
-    ['kick', '👢'],
-    ['region', '🌍']
+    'trust',
+    'untrust',
+    'invite',
+    'kick',
+    'region'
   ],
   [
-    ['block', '⛔'],
-    ['unblock', '♻️'],
-    ['claim', '👑'],
-    ['transfer', '🔄'],
-    ['delete', '🗑️']
+    'block',
+    'unblock',
+    'claim',
+    'transfer',
+    'delete'
   ]
 ];
 
-function buildTempVoicePanel(client) {
+const applicationEmojiNames = {
+  name: '10000004015',
+  limit: '10000004016',
+  privacy: '10000004017',
+  waiting_room: '10000004018',
+  chat: '10000004019',
+  trust: '10000004020',
+  untrust: '10000004021',
+  invite: '10000004022',
+  kick: '10000004023',
+  region: '10000004024',
+  block: '10000004025',
+  unblock: '10000004026',
+  claim: '10000004027',
+  transfer: '10000004028',
+  delete: '10000004014'
+};
+
+const fallbackEmojis = {
+  name: '📝',
+  limit: '👥',
+  privacy: '🛡️',
+  waiting_room: '⏳',
+  chat: '💬',
+  trust: '✅',
+  untrust: '❌',
+  invite: '🔗',
+  kick: '👢',
+  region: '🌍',
+  block: '⛔',
+  unblock: '♻️',
+  claim: '👑',
+  transfer: '🔄',
+  delete: '🗑️'
+};
+
+const applicationEmojiCache = new WeakMap();
+const warnedMissingEmojiNames = new Set();
+
+async function fetchApplicationEmojis(client) {
+  if (!client?.application?.emojis?.fetch) {
+    console.warn('[TempVoice] Application emojis are unavailable; using Unicode button emojis.');
+    return null;
+  }
+
+  if (!applicationEmojiCache.has(client)) {
+    applicationEmojiCache.set(
+      client,
+      client.application.emojis.fetch().catch(error => {
+        console.warn('[TempVoice] Could not fetch application emojis; using Unicode button emojis:', error.message);
+        return null;
+      })
+    );
+  }
+
+  return applicationEmojiCache.get(client);
+}
+
+async function buildTempVoicePanel(client) {
+  const emojis = await fetchApplicationEmojis(client);
   const embed = new EmbedBuilder()
     .setColor('#e34b70')
     .setTitle('TempVoice Interface')
@@ -50,28 +113,44 @@ function buildTempVoicePanel(client) {
       'Create a temporary room by joining the configured **Creator Channel**.',
       'While connected to your room, use the buttons below to manage it.',
       'With Waiting Room on, move guests back into your room to approve them.',
-      '',
-      '`📝 NAME` · `👥 LIMIT` · `🛡️ PRIVACY` · `⏳ WAITING ROOM` · `💬 CHAT`',
-      '`✅ TRUST` · `❌ UNTRUST` · `🔗 INVITE` · `👢 KICK` · `🌍 REGION`',
-      '`⛔ BLOCK` · `♻️ UNBLOCK` · `👑 CLAIM` · `🔄 TRANSFER` · `🗑️ DELETE`'
     ].join('\n'))
+    .setImage(`attachment://${BUTTON_GUIDE_NAME}`)
     .setFooter({
-      text: 'Temporary rooms are removed after everyone leaves',
+      text: 'Press the buttons below to use the interface · Rooms are removed after everyone leaves',
       ...(client.user?.displayAvatarURL ? { iconURL: client.user.displayAvatarURL() } : {})
     });
 
   const components = buttonRows.map(row =>
     new ActionRowBuilder().addComponents(
-      ...row.map(([action, emoji]) =>
-        new ButtonBuilder()
+      ...row.map(action => {
+        const emojiName = applicationEmojiNames[action];
+        const applicationEmoji = emojis?.find(emoji => emoji.name === emojiName);
+        if (emojis && !applicationEmoji && !warnedMissingEmojiNames.has(emojiName)) {
+          warnedMissingEmojiNames.add(emojiName);
+          console.warn(`[TempVoice] Application emoji "${emojiName}" for "${action}" was not found; using its Unicode fallback.`);
+        }
+
+        const button = new ButtonBuilder()
           .setCustomId(`${BUTTON_PREFIX}${action}`)
-          .setEmoji(emoji)
-          .setStyle(ButtonStyle.Secondary)
-      )
+          .setStyle(ButtonStyle.Secondary);
+
+        if (applicationEmoji) {
+          button.setEmoji({
+            id: applicationEmoji.id,
+            name: applicationEmoji.name,
+            animated: applicationEmoji.animated
+          });
+        } else {
+          button.setEmoji(fallbackEmojis[action]);
+        }
+
+        return button;
+      })
     )
   );
 
-  return { embed, components };
+  const files = [new AttachmentBuilder(BUTTON_GUIDE_PATH, { name: BUTTON_GUIDE_NAME })];
+  return { embed, components, files };
 }
 
 async function replyPrivate(interaction, content, extra = {}) {
