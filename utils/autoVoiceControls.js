@@ -107,16 +107,14 @@ async function fetchApplicationEmojis(client) {
 async function buildTempVoicePanel(client) {
   const emojis = await fetchApplicationEmojis(client);
   const embed = new EmbedBuilder()
-    .setColor('#e34b70')
-    .setTitle('TempVoice Interface')
+    .setColor('#222222')
+    .setTitle('## TempVoice Interface')
     .setDescription([
-      'Create a temporary room by joining the configured **Creator Channel**.',
-      'While connected to your room, use the buttons below to manage it.',
-      'With Waiting Room on, move guests back into your room to approve them.',
+      'This **interface** can be used to manage temporary voice channels.',
     ].join('\n'))
     .setImage(`attachment://${BUTTON_GUIDE_NAME}`)
     .setFooter({
-      text: 'Press the buttons below to use the interface · Rooms are removed after everyone leaves',
+      text: 'Press the buttons below to use the interface',
       ...(client.user?.displayAvatarURL ? { iconURL: client.user.displayAvatarURL() } : {})
     });
 
