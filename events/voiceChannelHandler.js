@@ -28,10 +28,8 @@ function setupIntervals(client) {
   
   setInterval(async () => {
     try {
-      const now = Date.now();
       const outdatedChannels = await TemporaryChannelModel.find({
-        isTemporary: true,
-        createdAt: { $lt: new Date(now - 6 * 60 * 60 * 1000) }
+        isTemporary: true
       });
 
       for (const channel of outdatedChannels) {
@@ -50,8 +48,8 @@ async function cleanupTemporaryRoom(record, guild) {
   const waitingChannel = record.waitingRoomChannelId
     ? guild.channels.cache.get(record.waitingRoomChannelId)
     : null;
-  const mainRoomEmpty = !channel || channel.members.size === 0;
-  const waitingRoomEmpty = !waitingChannel || waitingChannel.members.size === 0;
+  const mainRoomEmpty = !channel || channel.members.filter(m => !m.user.bot).size === 0;
+  const waitingRoomEmpty = !waitingChannel || waitingChannel.members.filter(m => !m.user.bot).size === 0;
 
   if (mainRoomEmpty && waitingRoomEmpty) {
     if (waitingChannel) await waitingChannel.delete('TempVoice room is empty');
@@ -174,8 +172,6 @@ const checkOutdatedCentralizedControls = async (client) => {
 };
 
 const handleVoiceStateUpdate = async (client, oldState, newState) => {
-  if (!newState.member?.user || newState.member.user.bot) return;
-
   if (oldState.channelId && oldState.channelId !== newState.channelId) {
     const departingRoom = await TemporaryChannelModel.findOne({
       isTemporary: true,
@@ -193,6 +189,8 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
     }
   }
 
+
+  if (!newState.member?.user || newState.member.user.bot) return;
 
   if (oldState.channelId === newState.channelId) return;
 
