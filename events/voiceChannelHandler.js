@@ -40,7 +40,7 @@ function setupIntervals(client) {
     } catch (error) {
       console.error('Error during cleanup:', error);
     }
-  }, 15 * 1000);
+  }, 1 * 1000);
 }
 
 // Hitung manusia langsung dari voice state server (lebih akurat daripada cache member channel).
