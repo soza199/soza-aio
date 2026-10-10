@@ -26,12 +26,5 @@
     "password": "free",
     "secure": true,
     "name": "TriniumHost"
-  },
-  {
-    "name": "Anything You Like>;",
-    "host": "in2.nestbytes.site",
-    "port": 25567,
-    "password": "nestbytes653920JE",
-    "secure": false
   }
 ]
