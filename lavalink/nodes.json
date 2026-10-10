@@ -33,12 +33,5 @@
     "port": 25567,
     "password": "nestbytes653920JE",
     "secure": false
-  },
-  {
-    "name": "TripleN",
-    "host": "lavalink.nazha.online",
-    "port": 443,
-    "password": "nazhafreelava",
-    "secure": true
   }
 ]
