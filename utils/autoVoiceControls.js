@@ -13,7 +13,7 @@ const {
   UserSelectMenuBuilder
 } = require('discord.js');
 const path = require('node:path');
-const { TemporaryChannelModel } = require('../models/autoVoice/schema');
+const { TemporaryChannelModel, UserVoicePreferenceModel } = require('../models/autoVoice/schema');
 
 const Flags = PermissionsBitField.Flags;
 const BUTTON_PREFIX = 'tempvoice_btn_';
@@ -623,6 +623,31 @@ async function handleRegionSelection(interaction) {
   await replyPrivate(interaction, `Voice region set to ${region === 'auto' ? 'Automatic' : region}.`);
 }
 
+// Simpan pengaturan room milik owner (per pengguna, per server) supaya dipakai lagi saat bikin VC berikutnya.
+async function saveOwnerPreferences(interaction) {
+  try {
+    const channel = interaction.member?.voice?.channel;
+    if (!interaction.guild || !channel) return;
+    const record = await TemporaryChannelModel.findOne({ channelId: channel.id, isTemporary: true });
+    if (!record || record.userId !== interaction.user.id) return;
+    await UserVoicePreferenceModel.updateOne(
+      { guildId: interaction.guild.id, userId: record.userId },
+      { $set: {
+        name: record.name || channel.name,
+        userLimit: channel.userLimit || 0,
+        rtcRegion: channel.rtcRegion || null,
+        isPrivate: !!record.isPrivate,
+        chatEnabled: record.chatEnabled !== false,
+        trustedUserIds: userIds(record, 'trustedUserIds'),
+        blockedUserIds: userIds(record, 'blockedUserIds')
+      } },
+      { upsert: true }
+    );
+  } catch (error) {
+    console.error('Error saving TempVoice preferences:', error);
+  }
+}
+
 async function handle(interaction) {
   const customId = interaction.customId;
   if (typeof customId !== 'string' || !customId.startsWith('tempvoice_')) return false;
@@ -637,6 +662,7 @@ async function handle(interaction) {
     } else if (interaction.isStringSelectMenu() && customId.startsWith('tempvoice_region_')) {
       await handleRegionSelection(interaction);
     }
+    if (!customId.startsWith(BUTTON_PREFIX + 'delete')) await saveOwnerPreferences(interaction);
   } catch (error) {
     console.error('Error handling TempVoice interaction:', error);
     await replyPrivate(interaction, error.message || 'Something went wrong while managing your room.')

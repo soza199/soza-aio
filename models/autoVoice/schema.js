@@ -29,13 +29,28 @@ const CentralizedControlSchema = new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   messageId: { type: String, required: true }
 });
+const UserVoicePreferenceSchema = new mongoose.Schema({
+  guildId: { type: String, required: true },
+  userId: { type: String, required: true },
+  name: { type: String, default: null },
+  userLimit: { type: Number, default: 0 },
+  rtcRegion: { type: String, default: null },
+  isPrivate: { type: Boolean, default: false },
+  chatEnabled: { type: Boolean, default: true },
+  trustedUserIds: { type: [String], default: [] },
+  blockedUserIds: { type: [String], default: [] }
+});
+UserVoicePreferenceSchema.index({ guildId: 1, userId: 1 }, { unique: true });
+
 const VoiceChannelModel = mongoose.model('VoiceChannel', VoiceChannelSchema);
 const TemporaryChannelModel = mongoose.model('TemporaryChannel', TemporaryChannelSchema);
 const CentralizedControlModel = mongoose.model('CentralizedControl', CentralizedControlSchema);
+const UserVoicePreferenceModel = mongoose.model('UserVoicePreference', UserVoicePreferenceSchema);
 
 
 module.exports = {
   VoiceChannelModel,
   TemporaryChannelModel,
   CentralizedControlModel,
+  UserVoicePreferenceModel,
 };

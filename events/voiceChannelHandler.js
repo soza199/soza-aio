@@ -1,5 +1,5 @@
 const { Client, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { VoiceChannelModel, TemporaryChannelModel, CentralizedControlModel } = require('../models/autoVoice/schema');
+const { VoiceChannelModel, TemporaryChannelModel, CentralizedControlModel, UserVoicePreferenceModel } = require('../models/autoVoice/schema');
 const tempVoiceControls = require('../utils/autoVoiceControls');
 let config = {};
 
@@ -40,21 +40,30 @@ function setupIntervals(client) {
     } catch (error) {
       console.error('Error during cleanup:', error);
     }
-  }, 60 * 1000);
+  }, 15 * 1000);
 }
 
-async function cleanupTemporaryRoom(record, guild) {
+// Hitung manusia langsung dari voice state server (lebih akurat daripada cache member channel).
+function humanCount(guild, channelId, excludeUserId) {
+  if (!channelId) return 0;
+  return guild.voiceStates.cache.filter(vs =>
+    vs.channelId === channelId &&
+    vs.id !== excludeUserId &&
+    !(vs.member?.user?.bot)
+  ).size;
+}
+
+async function cleanupTemporaryRoom(record, guild, excludeUserId = null) {
   const channel = guild.channels.cache.get(record.channelId);
   const waitingChannel = record.waitingRoomChannelId
     ? guild.channels.cache.get(record.waitingRoomChannelId)
     : null;
-  const mainRoomEmpty = !channel || channel.members.filter(m => !m.user.bot).size === 0;
-  const waitingRoomEmpty = !waitingChannel || waitingChannel.members.filter(m => !m.user.bot).size === 0;
-
+  const mainRoomEmpty = !channel || humanCount(guild, channel.id, excludeUserId) === 0;
+  const waitingRoomEmpty = !waitingChannel || humanCount(guild, waitingChannel.id, excludeUserId) === 0;
   if (mainRoomEmpty && waitingRoomEmpty) {
-    if (waitingChannel) await waitingChannel.delete('TempVoice room is empty');
-    if (channel) await channel.delete('TempVoice room is empty');
     await TemporaryChannelModel.deleteOne({ channelId: record.channelId });
+    if (waitingChannel) await waitingChannel.delete('TempVoice room is empty').catch(() => {});
+    if (channel) await channel.delete('TempVoice room is empty').catch(() => {});
     return true;
   }
 
@@ -182,7 +191,14 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
     });
     if (departingRoom && newState.channelId !== departingRoom.waitingRoomChannelId) {
       try {
-        await cleanupTemporaryRoom(departingRoom, oldState.guild);
+        const deleted = await cleanupTemporaryRoom(departingRoom, oldState.guild, oldState.id);
+        if (!deleted) {
+          // Cek ulang sebentar lagi untuk jaga-jaga cache Discord belum ter-update.
+          setTimeout(async () => {
+            const fresh = await TemporaryChannelModel.findOne({ channelId: departingRoom.channelId }).catch(() => null);
+            if (fresh) await cleanupTemporaryRoom(fresh, oldState.guild).catch(() => {});
+          }, 2000);
+        }
       } catch (error) {
         console.error(`Error cleaning up TempVoice room ${departingRoom.channelId}:`, error);
       }
@@ -257,8 +273,20 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
     let createdChannel;
     try {
 
+      const pref = await UserVoicePreferenceModel.findOne({ guildId, userId: member.user.id }).catch(() => null);
+      const roomName = (pref?.name || `${member.user.username}'s channel`).slice(0, 100);
+      const trusted = (pref?.trustedUserIds || []).filter(id => id !== member.user.id);
+      const blocked = (pref?.blockedUserIds || []).filter(id => id !== member.user.id);
+      const everyoneAllow = [PermissionsBitField.Flags.ViewChannel];
+      const everyoneDeny = [];
+      if (pref?.isPrivate) everyoneDeny.push(PermissionsBitField.Flags.Connect);
+      else everyoneAllow.push(PermissionsBitField.Flags.Connect);
+      if (pref && pref.chatEnabled === false) everyoneDeny.push(PermissionsBitField.Flags.SendMessages);
+
       createdChannel = await newState.guild.channels.create({
-        name: `${member.user.username}'s channel`,
+        name: roomName,
+        userLimit: pref?.userLimit || 0,
+        rtcRegion: pref?.rtcRegion || null,
         type: ChannelType.GuildVoice,
         parent: newState.channel.parentId,
         permissionOverwrites: [
@@ -274,8 +302,19 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
           },
           {
             id: newState.guild.roles.everyone,
-            allow: [PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel]
-          }
+            allow: everyoneAllow,
+            deny: everyoneDeny
+          },
+          ...trusted.map(id => ({
+            id,
+            type: 1,
+            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak]
+          })),
+          ...blocked.map(id => ({
+            id,
+            type: 1,
+            deny: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]
+          }))
         ]
       });
 
@@ -285,8 +324,12 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
         userId: member.user.id,
         createdAt: new Date(),
         isTemporary: true,
-        name: `${member.user.username}'s channel`,
-        description: ''
+        name: roomName,
+        description: '',
+        isPrivate: !!pref?.isPrivate,
+        chatEnabled: pref ? pref.chatEnabled !== false : true,
+        trustedUserIds: trusted,
+        blockedUserIds: blocked
       });
 
       await member.voice.setChannel(createdChannel);
@@ -703,6 +746,23 @@ module.exports = (client) => {
       client.guilds.cache.forEach(guild => sendOrUpdateCentralizedEmbed(client, guild));
     } catch (error) {
       console.error('Error during ready event:', error);
+    }
+  });
+
+  client.on('channelUpdate', async (oldChannel, newChannel) => {
+    try {
+      if (oldChannel.name === newChannel.name && oldChannel.userLimit === newChannel.userLimit && oldChannel.rtcRegion === newChannel.rtcRegion) return;
+      const record = await TemporaryChannelModel.findOne({ channelId: newChannel.id, isTemporary: true });
+      if (!record) return;
+      record.name = newChannel.name;
+      await record.save();
+      await UserVoicePreferenceModel.updateOne(
+        { guildId: newChannel.guild.id, userId: record.userId },
+        { $set: { name: newChannel.name, userLimit: newChannel.userLimit || 0, rtcRegion: newChannel.rtcRegion || null } },
+        { upsert: true }
+      );
+    } catch (error) {
+      console.error('Error syncing TempVoice channel update:', error);
     }
   });
 
