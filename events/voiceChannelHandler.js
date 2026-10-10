@@ -191,14 +191,8 @@ const handleVoiceStateUpdate = async (client, oldState, newState) => {
     });
     if (departingRoom && newState.channelId !== departingRoom.waitingRoomChannelId) {
       try {
-        const deleted = await cleanupTemporaryRoom(departingRoom, oldState.guild, oldState.id);
-        if (!deleted) {
-          // Cek ulang sebentar lagi untuk jaga-jaga cache Discord belum ter-update.
-          setTimeout(async () => {
-            const fresh = await TemporaryChannelModel.findOne({ channelId: departingRoom.channelId }).catch(() => null);
-            if (fresh) await cleanupTemporaryRoom(fresh, oldState.guild).catch(() => {});
-          }, 2000);
-        }
+        // Hapus langsung saat orang terakhir keluar, tanpa jeda waktu.
+        await cleanupTemporaryRoom(departingRoom, oldState.guild, oldState.id);
       } catch (error) {
         console.error(`Error cleaning up TempVoice room ${departingRoom.channelId}:`, error);
       }
