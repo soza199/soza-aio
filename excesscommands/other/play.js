@@ -1,7 +1,10 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getSpotifyTrackQueries, parseSpotifyUrl } = require('../../utils/spotifyTracks');
 const { maximizeVoiceChannelBitrate } = require('../../utils/voiceQuality');
-const { getRiffyQueuePosition } = require('../../utils/riffyPlayback');
+const {
+    getRiffyQueuePosition,
+    startRiffyPlayerAndWaitForStart
+} = require('../../utils/riffyPlayback');
 
 function temporaryReply(message, content, timeout = 6000) {
     return message.reply(content).then(reply => {
@@ -260,8 +263,12 @@ module.exports = {
                     // starting audio. TrackStart (and the now-playing
                     // panel) should happen as soon as the first result
                     // is available; remaining results can fill the queue.
-                    if (!startedPlayback && !player.playing && !player.paused) {
-                        await withTimeout(player.play(), 20000, 'Lavalink playback');
+                    if (
+                        !startedPlayback &&
+                        !player.paused &&
+                        (!player.current || !player.playing)
+                    ) {
+                        await startRiffyPlayerAndWaitForStart(player, client.riffy, 20000);
                         startedPlayback = true;
                     }
                 };

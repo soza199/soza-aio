@@ -479,6 +479,7 @@ module.exports = (client) => {
         client.riffy.on('trackStart', async (player, track) => {
             try {
                 player.__recoveringTrackError = false;
+                player.__recoveringTrackStuck = false;
                 clearTimeout(player.__trackRecoveryTimeout);
                 player.__trackRecoveryTimeout = null;
                 clearTimeout(player.__trackRecoveryResetTimer);
@@ -486,6 +487,11 @@ module.exports = (client) => {
                     if (player.playing) player.__trackRecoveryAttempts = 0;
                     player.__trackRecoveryResetTimer = null;
                 }, 15000);
+                clearTimeout(player.__trackStuckResetTimer);
+                player.__trackStuckResetTimer = setTimeout(() => {
+                    if (player.playing) player.__trackStuckAttempts = 0;
+                    player.__trackStuckResetTimer = null;
+                }, 30000);
                 const channel = client.channels.cache.get(player.textChannel);
                 const guildId = player.guildId;
 
@@ -738,6 +744,7 @@ module.exports = (client) => {
                 if (
                     player.__queueEndAttempt !== queueEndAttempt ||
                     player.__recoveringTrackError ||
+                    player.__recoveringTrackStuck ||
                     player.__autoplayInProgress ||
                     player.__manualStop ||
                     player.queue.length > 0 ||
@@ -2010,6 +2017,7 @@ module.exports = (client) => {
             const guildId = player.guildId;
             clearTimeout(player.__trackRecoveryTimeout);
             clearTimeout(player.__trackRecoveryResetTimer);
+            clearTimeout(player.__trackStuckResetTimer);
             await handlePlayerCleanup(client, guildId, player, 'Player destroyed');
         });
 
@@ -2020,21 +2028,40 @@ module.exports = (client) => {
             console.warn(`[V2 TRACK STUCK] Guild ${guildId}: ${trackInfo.title || 'Unknown track'} stalled after ${payload?.thresholdMs || 'unknown'}ms`);
             advancedMessageManager.cleanupGuildMessages(client, guildId, ['track']).catch(() => {});
 
-            // Riffy calls stop() immediately after emitting this event.
-            // Schedule recovery so the new play request is not overwritten
-            // by that stop operation.
-            setTimeout(async () => {
+            if (player.__manualStop || player.__recoveringTrackError || player.__recoveringTrackStuck) return;
+            player.__recoveringTrackStuck = true;
+            const recoveryVersion = (player.__trackStuckRecoveryVersion || 0) + 1;
+            player.__trackStuckRecoveryVersion = recoveryVersion;
+            player.__trackStuckAttempts = (player.__trackStuckAttempts || 0) + 1;
+
+            const recoveryPromise = (async () => {
                 try {
+                    // Riffy calls stop() immediately after emitting this event.
+                    // Let that stop finish before migrating or starting again.
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                    if (
+                        player.__trackStuckRecoveryVersion !== recoveryVersion ||
+                        player.__manualStop ||
+                        player.__recoveringTrackError
+                    ) return;
+
+                    await migratePlayerForRecovery(player, 'stuck track');
+                    if (
+                        player.__trackStuckRecoveryVersion !== recoveryVersion ||
+                        player.__manualStop ||
+                        player.__recoveringTrackError
+                    ) return;
+
                     // If there are queued tracks, start the next one instead
-                    // of leaving the player silent while the UI still shows
-                    // the old session.
+                    // of leaving the player silent on an unhealthy node.
                     if (player.queue.length > 0) {
                         await player.play();
                         return;
                     }
 
-                    // A single track may stall because its source stream
-                    // paused. Retry it once through the same player.
+                    // Retry the same song once after moving to another healthy
+                    // node. Replaying it repeatedly on a degraded node causes
+                    // the short stop/start loop users hear as choppy audio.
                     if (track && typeof track === 'object' && !stuckTrackRetries.has(track)) {
                         stuckTrackRetries.add(track);
                         player.queue.unshift(track);
@@ -2042,11 +2069,85 @@ module.exports = (client) => {
                         return;
                     }
 
-                    console.warn(`[V2 TRACK STUCK] Retry exhausted in guild ${guildId}`);
+                    if (player.__trackStuckAttempts < 3 && track) {
+                        const title = String(trackInfo.title || '').trim();
+                        const author = String(trackInfo.author || '').trim();
+                        const requester = track.requester || trackInfo.requester;
+                        const searchPlatform = client.riffy.options?.defaultSearchPlatform || 'ytsearch';
+                        const searchTerms = [
+                            [title, author].filter(Boolean).join(' '),
+                            `${title} official audio`,
+                            title
+                        ].filter(Boolean);
+                        const candidates = [];
+
+                        for (const terms of searchTerms) {
+                            const result = await withNodeTimeout(
+                                client.riffy.resolve({
+                                    query: terms,
+                                    source: searchPlatform,
+                                    requester,
+                                    node: player.node
+                                }),
+                                12000
+                            );
+                            const matches = result?.tracks?.filter(candidate => (
+                                candidate?.info?.identifier &&
+                                candidate.info.identifier !== trackInfo.identifier &&
+                                candidate.info.uri !== trackInfo.uri &&
+                                !candidates.some(existing =>
+                                    existing.info?.identifier === candidate.info.identifier
+                                )
+                            )) || [];
+                            candidates.push(...matches);
+                            if (candidates.length >= 3) break;
+                        }
+
+                        for (const candidate of candidates.slice(0, 3).reverse()) {
+                            candidate.requester = requester;
+                            if (candidate.info) candidate.info.requester = requester;
+                            player.queue.unshift(candidate);
+                        }
+
+                        if (candidates.length > 0) {
+                            await player.play();
+                            return;
+                        }
+                    }
+
+                    console.warn(`[V2 TRACK STUCK] Recovery exhausted in guild ${guildId}`);
+                    const channel = client.channels.cache.get(player.textChannel);
+                    if (channel) {
+                        const errorContainer = advancedMessageManager.createV2Container('error')
+                            .addTextDisplayComponents(textDisplay =>
+                                textDisplay.setContent(
+                                    `**❌ PLAYBACK INTERRUPTED**\n\n**${trackInfo.title || 'This track'}** repeatedly stalled, even after switching Lavalink servers.\n\n*Try another version or start playback again in a moment.*`
+                                )
+                            );
+                        const errorMsg = await channel.send({
+                            components: [errorContainer],
+                            flags: MessageFlags.IsComponentsV2
+                        });
+                        advancedMessageManager.addQuickDeleteMessage(client, errorMsg, 'error');
+                    }
+                    await handlePlayerCleanup(client, guildId, player, 'Track stalled repeatedly');
+                    player.destroy();
                 } catch (retryError) {
                     console.error(`[V2 TRACK STUCK] Recovery failed in guild ${guildId}:`, retryError);
+                    if (player.__trackStuckRecoveryVersion === recoveryVersion && !player.__recoveringTrackError) {
+                        await handlePlayerCleanup(client, guildId, player, 'Track stall recovery failed');
+                        player.destroy();
+                    }
                 }
-            }, 0);
+            })().finally(() => {
+                if (player.__trackStuckRecoveryVersion === recoveryVersion) {
+                    player.__recoveringTrackStuck = false;
+                }
+                if (player.__trackStuckRecoveryPromise === recoveryPromise) {
+                    player.__trackStuckRecoveryPromise = null;
+                }
+            });
+            player.__trackStuckRecoveryPromise = recoveryPromise;
         });
 
         client.riffy.on('trackError', async (player, track, error) => {
@@ -2061,6 +2162,8 @@ module.exports = (client) => {
             if (track && typeof track === 'object') trackErrorRetries.add(track);
             // Set this before any await so queueEnd cannot start autoplay while
             // the failed source is being recovered.
+            player.__trackStuckRecoveryVersion = (player.__trackStuckRecoveryVersion || 0) + 1;
+            player.__recoveringTrackStuck = false;
             player.__recoveringTrackError = true;
             clearTimeout(player.__trackRecoveryTimeout);
             player.__trackRecoveryTimeout = setTimeout(() => {
