@@ -72,6 +72,25 @@ function markNodeUnhealthy(node, error) {
     });
 }
 
+function getNodeLoadScore(node, stats) {
+    const cpu = stats?.cpu?.systemLoad ?? stats?.cpu?.lavalinkLoad ?? 0;
+    const playing = stats?.playingPlayers ?? 0;
+    const deficit = stats?.frameStats?.deficit ?? 0;
+    const nulled = stats?.frameStats?.nulled ?? 0;
+    // Lower is better. Dropped audio frames (deficit/nulled) are what
+    // listeners hear as stuttering, so they dominate the score.
+    return deficit * 3 + nulled + cpu * 100 + playing * 2;
+}
+
+function isNodeStruggling(stats) {
+    if (!stats) return false;
+    const deficit = stats.frameStats?.deficit ?? 0;
+    const systemLoad = stats.cpu?.systemLoad ?? 0;
+    // A node dropping a meaningful share of audio frames per minute, or
+    // running near CPU saturation, will stutter no matter what we send it.
+    return deficit > 1000 || systemLoad > 0.95;
+}
+
 async function checkNodeHealth(node) {
     if (!node?.connected || !node.rest?.getStats) return false;
 
@@ -81,12 +100,21 @@ async function checkNodeHealth(node) {
     }
 
     try {
-        await withTimeout(
+        const stats = await withTimeout(
             node.rest.getStats(),
             5000,
             `Lavalink node health check (${node.name})`
         );
-        nodeHealthCache.set(node, { healthy: true, checkedAt: Date.now() });
+        if (isNodeStruggling(stats)) {
+            markNodeUnhealthy(node, new Error('Node is dropping audio frames (overloaded)'));
+            console.warn(`[RIFFY] Node ${node.name} is overloaded (audio frame deficit), skipping it`);
+            return false;
+        }
+        nodeHealthCache.set(node, {
+            healthy: true,
+            checkedAt: Date.now(),
+            score: getNodeLoadScore(node, stats)
+        });
         return true;
     } catch (error) {
         markNodeUnhealthy(node, error);
@@ -100,11 +128,21 @@ async function waitForHealthyNode(client, timeoutMs = 15000, excludedNodes = new
 
     while (Date.now() - startedAt < timeoutMs) {
         const candidates = (client.riffy?.leastUsedNodes || [])
-            .filter(node => !excludedNodes.has(node))
-            .sort((a, b) => (a.rest?.calls || 0) - (b.rest?.calls || 0));
+            .filter(node => !excludedNodes.has(node));
 
+        const healthy = [];
         for (const node of candidates) {
-            if (await checkNodeHealth(node)) return node;
+            if (await checkNodeHealth(node)) healthy.push(node);
+        }
+
+        if (healthy.length) {
+            // Pick the least-loaded healthy node: fewest dropped audio
+            // frames first, then CPU load, then active players. REST call
+            // count says nothing about audio quality, so it is not used.
+            healthy.sort((a, b) =>
+                (nodeHealthCache.get(a)?.score ?? 0) - (nodeHealthCache.get(b)?.score ?? 0)
+            );
+            return healthy[0];
         }
 
         await new Promise(resolve => setTimeout(resolve, 250));
