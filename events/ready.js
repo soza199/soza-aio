@@ -129,24 +129,40 @@ module.exports = {
 
       
         updateStatus();
-        
-      
+
+        // Immediate status refresh hook: called by the music events whenever
+        // the current track changes, so the bot's status follows the song
+        // right away instead of waiting for the rotation interval.
+        client.updateBotStatus = (reason) => {
+            updateStatus().catch(err => {
+                console.warn(`${colors.yellow}[STATUS]${colors.reset} Immediate status update failed${reason ? ` (${reason})` : ''}: ${err?.message || err}`);
+            });
+        };
+
         async function checkAndUpdateInterval() {
-            const statusDoc = await botStatusCollection.findOne({});
-            const newInterval = statusDoc?.interval ? statusDoc.interval * 1000 : 10000;
-            
-            if (newInterval !== currentInterval) {
-                console.log(`${colors.cyan}[STATUS]${colors.reset} Updating interval to ${newInterval / 1000} seconds`);
-                currentInterval = newInterval;
+            try {
+                const statusDoc = await botStatusCollection.findOne({});
+                const newInterval = statusDoc?.interval ? statusDoc.interval * 1000 : 10000;
+
+                if (newInterval !== currentInterval) {
+                    console.log(`${colors.cyan}[STATUS]${colors.reset} Updating interval to ${newInterval / 1000} seconds`);
+                    currentInterval = newInterval;
+                }
+            } catch (err) {
+                // Never kill the rotation loop because of a database error.
+                console.warn(`${colors.yellow}[STATUS]${colors.reset} Failed to read status interval, keeping ${currentInterval / 1000}s:`, err?.message || err);
             }
-            
-          
+
             setTimeout(() => {
-                updateStatus().then(() => checkAndUpdateInterval());
+                updateStatus()
+                    .then(() => checkAndUpdateInterval())
+                    .catch(err => {
+                        console.warn(`${colors.yellow}[STATUS]${colors.reset} Status update failed, retrying in 5s:`, err?.message || err);
+                        setTimeout(checkAndUpdateInterval, 5000);
+                    });
             }, currentInterval);
         }
-        
-       
+
         checkAndUpdateInterval();
 
         console.log('\x1b[31m[ CORE ]\x1b[0m \x1b[32m%s\x1b[0m', 'Bot Activity Cycle Running ✅');
