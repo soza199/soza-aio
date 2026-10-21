@@ -526,6 +526,8 @@ module.exports = (client) => {
 
                 await advancedMessageManager.cleanupGuildMessages(client, guildId);
                 sessionManager.updateActivity(guildId);
+                client.updateBotStatus?.('trackStart');
+
 
                 function formatTime(ms) {
                     if (!ms || ms === 0) return "0:00";
@@ -767,6 +769,7 @@ module.exports = (client) => {
                 }
 
                 sessionManager.updateActivity(guildId);
+                client.updateBotStatus?.('trackEnd');
             } catch (error) {
                 console.error('V2 Track end error:', error);
             }
@@ -990,6 +993,9 @@ module.exports = (client) => {
                     }
                 }
 
+                // Queue ended for real (no autoplay claimed it): refresh the
+                // status so it stops showing the previous song immediately.
+                client.updateBotStatus?.('queueEnd');
                 sessionManager.endSession(guildId);
 
             } catch (error) {
@@ -2076,6 +2082,7 @@ module.exports = (client) => {
             clearTimeout(player.__trackRecoveryResetTimer);
             clearTimeout(player.__trackStuckResetTimer);
             await handlePlayerCleanup(client, guildId, player, 'Player destroyed');
+            client.updateBotStatus?.('playerDestroy');
         });
 
         client.riffy.on('trackStuck', (player, track, payload) => {
